@@ -434,10 +434,14 @@ export async function downloadAttendanceBackup(req, res, next) {
       csvContent = Buffer.from(backup[0].file_content, "base64").toString(
         "utf-8",
       );
-      
+
       // Verify it's valid CSV by checking if it starts with expected content
       // If decoded content looks like base64 gibberish, it might already be plain text
-      if (!csvContent.includes('"') && !csvContent.includes(',') && backup[0].file_content.includes(',')) {
+      if (
+        !csvContent.includes('"') &&
+        !csvContent.includes(",") &&
+        backup[0].file_content.includes(",")
+      ) {
         // The original was probably already plain text
         csvContent = backup[0].file_content;
       }
