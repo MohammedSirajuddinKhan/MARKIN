@@ -30,7 +30,7 @@ export async function studentDashboard(req, res, next) {
       `SELECT student_id, student_name, roll_no, year, stream, division
        FROM student_details_db
        WHERE student_id = ?`,
-      [studentId]
+      [studentId],
     );
 
     const studentInfo = student?.[0] || {};
@@ -39,23 +39,26 @@ export async function studentDashboard(req, res, next) {
     const stats = await getStudentStats(studentId);
 
     // Get defaulter status
-    const defaulterStatus = await defaulterService.getStudentDefaulterStatus(studentId);
+    const defaulterStatus =
+      await defaulterService.getStudentDefaulterStatus(studentId);
 
     // Get monthly summary
     const [monthlySummary] = await pool.query(
       `SELECT 
          YEAR(session_date) as year,
          MONTH(session_date) as month,
+         stream,
+         division,
          COUNT(*) as total_sessions,
          SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) as present_count,
          SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as absent_count,
          ROUND((SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 1) as percentage
        FROM attendance_records
        WHERE student_id = ?
-       GROUP BY YEAR(session_date), MONTH(session_date)
+       GROUP BY YEAR(session_date), MONTH(session_date), stream, division
        ORDER BY year DESC, month DESC
        LIMIT 6`,
-      [studentId]
+      [studentId],
     );
 
     return res.json({
@@ -105,7 +108,7 @@ export async function markAttendance(req, res, next) {
       latitude,
       longitude,
       CAMPUS_LAT,
-      CAMPUS_LNG
+      CAMPUS_LNG,
     );
 
     if (distance > CAMPUS_RADIUS) {
@@ -113,7 +116,13 @@ export async function markAttendance(req, res, next) {
         `INSERT INTO geolocation_logs 
           (student_id, latitude, longitude, accuracy, distance, status, timestamp) 
          VALUES (?, ?, ?, ?, ?, 'REJECTED', NOW())`,
-        [student.id, latitude, longitude, accuracy || null, Math.round(distance)]
+        [
+          student.id,
+          latitude,
+          longitude,
+          accuracy || null,
+          Math.round(distance),
+        ],
       );
 
       return res
@@ -125,21 +134,21 @@ export async function markAttendance(req, res, next) {
       `INSERT INTO geolocation_logs 
         (student_id, latitude, longitude, accuracy, distance, status, timestamp) 
        VALUES (?, ?, ?, ?, ?, 'ACCEPTED', NOW())`,
-      [student.id, latitude, longitude, accuracy || null, Math.round(distance)]
+      [student.id, latitude, longitude, accuracy || null, Math.round(distance)],
     );
 
     await pool.query(
       `INSERT INTO self_marking 
         (student_id, status, marked_at) 
        VALUES (?, 'P', NOW())`,
-      [student.id]
+      [student.id],
     );
 
     await pool.query(
       `INSERT INTO activity_logs 
         (actor_role, actor_id, action, details, created_at) 
        VALUES ('student', ?, 'SELF_MARK_ATTENDANCE', ?, NOW())`,
-      [student.id, JSON.stringify({ distance })]
+      [student.id, JSON.stringify({ distance })],
     );
 
     const stats = await getStudentStats(student.id);
@@ -164,7 +173,7 @@ export async function studentActivity(req, res, next) {
        WHERE actor_role = 'student' AND actor_id = ?
        ORDER BY created_at DESC
        LIMIT 20`,
-      [studentId]
+      [studentId],
     );
 
     return res.json({ activity: rows });
@@ -173,3 +182,113 @@ export async function studentActivity(req, res, next) {
   }
 }
 
+export async function getAllSessions(req, res, next) {
+  try {
+    const studentId = req.session.user.id;
+
+    // Get all sessions the student has attended (both present and absent)
+    const [sessions] = await pool.query(
+      `SELECT 
+         ar.session_date,
+         ar.subject,
+         ar.status,
+         ar.year,
+         ar.stream,
+         ar.division,
+         t.name as teacher_name,
+         ar.created_at
+       FROM attendance_records ar
+       LEFT JOIN teacher_details_db t ON ar.teacher_id = t.teacher_id
+       WHERE ar.student_id = ?
+       ORDER BY ar.session_date DESC, ar.created_at DESC`,
+      [studentId],
+    );
+
+    res.json({ sessions });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getPresentSessions(req, res, next) {
+  try {
+    const studentId = req.session.user.id;
+
+    // Get sessions where student was present
+    const [sessions] = await pool.query(
+      `SELECT 
+         ar.session_date,
+         ar.subject,
+         ar.year,
+         ar.stream,
+         ar.division
+       FROM attendance_records ar
+       WHERE ar.student_id = ? AND ar.status = 'P'
+       ORDER BY ar.session_date DESC`,
+      [studentId],
+    );
+
+    res.json({ sessions });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAbsentSessions(req, res, next) {
+  try {
+    const studentId = req.session.user.id;
+
+    // Get sessions where student was absent
+    const [sessions] = await pool.query(
+      `SELECT 
+         ar.session_date,
+         ar.subject,
+         ar.year,
+         ar.stream,
+         ar.division
+       FROM attendance_records ar
+       WHERE ar.student_id = ? AND ar.status = 'A'
+       ORDER BY ar.session_date DESC`,
+      [studentId],
+    );
+
+    res.json({ sessions });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAttendanceCalendar(req, res, next) {
+  try {
+    const studentId = req.session.user.id;
+
+    // Get attendance data grouped by date
+    const [attendanceByDate] = await pool.query(
+      `SELECT 
+         DATE(session_date) as date,
+         COUNT(*) as total,
+         SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) as present,
+         SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as absent
+       FROM attendance_records
+       WHERE student_id = ?
+       GROUP BY DATE(session_date)
+       ORDER BY date DESC`,
+      [studentId],
+    );
+
+    // Convert to object keyed by date
+    const calendar = {};
+    attendanceByDate.forEach((row) => {
+      const dateStr = row.date.toISOString().split("T")[0];
+      calendar[dateStr] = {
+        total: row.total,
+        present: row.present,
+        absent: row.absent,
+      };
+    });
+
+    res.json({ calendar });
+  } catch (error) {
+    next(error);
+  }
+}

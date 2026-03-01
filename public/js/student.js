@@ -8,6 +8,7 @@ const profileDivision = document.querySelector("[data-profile-division]");
 
 const summarySessionsEl = document.querySelector("[data-summary-sessions]");
 const summaryPresentEl = document.querySelector("[data-summary-present]");
+const summaryAbsentEl = document.querySelector("[data-summary-absent]");
 const summaryPercentageEl = document.querySelector("[data-summary-percentage]");
 
 const progressBar = document.querySelector("[data-progress-bar]");
@@ -19,7 +20,59 @@ const monthlyBody = document.querySelector("[data-monthly-body]");
 const refreshButton = document.querySelector("[data-refresh]");
 const signoutButton = document.querySelector("[data-signout]");
 
+// Modal elements
+const showTotalSessionsButton = document.querySelector(
+  "[data-show-total-sessions]",
+);
+const showPresentSessionsButton = document.querySelector(
+  "[data-show-present-sessions]",
+);
+const showAbsentSessionsButton = document.querySelector(
+  "[data-show-absent-sessions]",
+);
+
+const totalSessionsModal = document.querySelector(
+  "[data-total-sessions-modal]",
+);
+const presentSessionsModal = document.querySelector(
+  "[data-present-sessions-modal]",
+);
+const absentSessionsModal = document.querySelector(
+  "[data-absent-sessions-modal]",
+);
+
+const closeTotalSessionsButton = document.querySelector(
+  "[data-close-total-sessions]",
+);
+const closePresentSessionsButton = document.querySelector(
+  "[data-close-present-sessions]",
+);
+const closeAbsentSessionsButton = document.querySelector(
+  "[data-close-absent-sessions]",
+);
+
+const totalSessionsList = document.querySelector("[data-total-sessions-list]");
+const presentSessionsList = document.querySelector(
+  "[data-present-sessions-list]",
+);
+const absentSessionsList = document.querySelector(
+  "[data-absent-sessions-list]",
+);
+
+const calendarContainer = document.querySelector("[data-calendar-container]");
+const calendarMonthDisplay = document.querySelector(
+  "[data-calendar-month-display]",
+);
+const calendarYearSelector = document.querySelector(
+  "[data-calendar-year-selector]",
+);
+const calendarPrevBtn = document.querySelector("[data-calendar-prev-btn]");
+const calendarNextBtn = document.querySelector("[data-calendar-next-btn]");
+
 let studentData = null;
+let attendanceCalendarData = {};
+let currentCalendarMonth = new Date().getMonth(); // 0-11
+let currentCalendarYear = new Date().getFullYear();
 
 function handleError(error, fallback = "Something went wrong") {
   console.error(error);
@@ -46,6 +99,7 @@ async function loadDashboard() {
     const summary = data.summary || {};
     summarySessionsEl.textContent = summary.totalSessions ?? 0;
     summaryPresentEl.textContent = summary.presentCount ?? 0;
+    summaryAbsentEl.textContent = summary.absentCount ?? 0;
 
     const percentage = summary.percentage ?? 0;
     summaryPercentageEl.textContent = `${percentage}%`;
@@ -59,6 +113,9 @@ async function loadDashboard() {
 
     // Render monthly summary
     renderMonthlySummary(data.monthlySummary || []);
+
+    // Load attendance calendar
+    loadAttendanceCalendar();
   } catch (error) {
     handleError(error, "Unable to load dashboard");
   }
@@ -68,7 +125,7 @@ function renderRecentAttendance(records) {
   if (!attendanceBody) return;
 
   if (!records.length) {
-    attendanceBody.innerHTML = `<tr><td colspan="3">No attendance records yet.</td></tr>`;
+    attendanceBody.innerHTML = `<tr><td colspan="6">No attendance records yet.</td></tr>`;
     return;
   }
 
@@ -81,6 +138,9 @@ function renderRecentAttendance(records) {
         <tr>
           <td>${formatDateTime(record.session_date || record.created_at)}</td>
           <td>${record.subject || "–"}</td>
+          <td>${record.year || "–"}</td>
+          <td>${record.stream || "–"}</td>
+          <td>${record.division || "–"}</td>
           <td><span class="badge ${statusClass}">${statusText}</span></td>
         </tr>
       `;
@@ -94,7 +154,7 @@ function renderMonthlySummary(summaries) {
   if (!monthlyBody) return;
 
   if (!summaries.length) {
-    monthlyBody.innerHTML = `<tr><td colspan="5">No data available.</td></tr>`;
+    monthlyBody.innerHTML = `<tr><td colspan="8">No data available.</td></tr>`;
     return;
   }
 
@@ -125,6 +185,9 @@ function renderMonthlySummary(summaries) {
       return `
         <tr>
           <td>${monthName} ${summary.year}</td>
+          <td>${summary.year || "–"}</td>
+          <td>${summary.stream || "–"}</td>
+          <td>${summary.division || "–"}</td>
           <td>${total}</td>
           <td>${present}</td>
           <td>${absent}</td>
@@ -135,6 +198,317 @@ function renderMonthlySummary(summaries) {
     .join("");
 
   monthlyBody.innerHTML = rows;
+}
+
+// Calendar functions
+async function loadAttendanceCalendar() {
+  if (!calendarContainer) return;
+
+  try {
+    const data = await apiFetch("/api/student/attendance/calendar");
+    attendanceCalendarData = data.calendar || {};
+    renderCalendar();
+  } catch (error) {
+    calendarContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--color-danger)">Failed to load calendar</div>`;
+    handleError(error, "Unable to load attendance calendar");
+  }
+}
+
+function renderCalendar() {
+  if (!calendarContainer) return;
+
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Update month display
+  if (calendarMonthDisplay) {
+    calendarMonthDisplay.textContent = `${monthNames[currentCalendarMonth]}`;
+  }
+
+  // Update year selector
+  if (calendarYearSelector && calendarYearSelector.options.length === 0) {
+    // Populate year selector (current year ± 5 years)
+    const currentYear = new Date().getFullYear();
+    for (let year = currentYear - 5; year <= currentYear + 10; year++) {
+      const option = document.createElement("option");
+      option.value = year;
+      option.textContent = year;
+      if (year === currentCalendarYear) {
+        option.selected = true;
+      }
+      calendarYearSelector.appendChild(option);
+    }
+  } else if (calendarYearSelector) {
+    calendarYearSelector.value = currentCalendarYear;
+  }
+
+  // Get first day of month and number of days in month
+  const firstDayOfMonth = new Date(
+    currentCalendarYear,
+    currentCalendarMonth,
+    1,
+  );
+  const lastDayOfMonth = new Date(
+    currentCalendarYear,
+    currentCalendarMonth + 1,
+    0,
+  );
+  const daysInMonth = lastDayOfMonth.getDate();
+  const startingDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday
+
+  // Build calendar HTML
+  let calendarHTML = "";
+
+  // Weekday headers
+  calendarHTML += '<div class="calendar-weekday-header">';
+  weekdayLabels.forEach((day) => {
+    calendarHTML += `<div class="calendar-weekday">${day}</div>`;
+  });
+  calendarHTML += "</div>";
+
+  // Calendar grid
+  calendarHTML += '<div class="calendar-grid">';
+
+  // Empty cells before first day of month
+  for (let i = 0; i < startingDayOfWeek; i++) {
+    calendarHTML += '<div class="calendar-day empty"></div>';
+  }
+
+  // Days of the month
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split("T")[0];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(currentCalendarYear, currentCalendarMonth, day);
+    const dateStr = date.toISOString().split("T")[0];
+    const dayData = attendanceCalendarData[dateStr] || {
+      total: 0,
+      present: 0,
+      absent: 0,
+    };
+
+    const color = getAttendanceColor(
+      dayData.total,
+      dayData.present,
+      dayData.absent,
+    );
+    const isToday = dateStr === todayStr;
+
+    const formattedDate = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    let tooltip = formattedDate;
+    if (dayData.total > 0) {
+      tooltip += `: ${dayData.present} present, ${dayData.absent} absent (${dayData.total} sessions)`;
+    } else {
+      tooltip += ": No sessions";
+    }
+
+    const todayClass = isToday ? " today" : "";
+    calendarHTML += `<div class="calendar-day${todayClass}" style="background-color: ${color}" data-tooltip="${tooltip}">${day}</div>`;
+  }
+
+  calendarHTML += "</div>";
+
+  calendarContainer.innerHTML = calendarHTML;
+}
+
+function previousMonth() {
+  currentCalendarMonth--;
+  if (currentCalendarMonth < 0) {
+    currentCalendarMonth = 11;
+    currentCalendarYear--;
+  }
+  renderCalendar();
+}
+
+function nextMonth() {
+  currentCalendarMonth++;
+  if (currentCalendarMonth > 11) {
+    currentCalendarMonth = 0;
+    currentCalendarYear++;
+  }
+  renderCalendar();
+}
+
+function getAttendanceColor(total, present, absent) {
+  if (total === 0) {
+    return "var(--color-border)"; // No sessions - gray
+  }
+
+  if (absent === total) {
+    return "#ff4444"; // All absent - red
+  }
+
+  const attendanceRate = present / total;
+
+  if (attendanceRate === 1) {
+    return "#216e39"; // 100% - darkest green
+  } else if (attendanceRate >= 0.75) {
+    return "#30a14e"; // 75-99% - dark green
+  } else if (attendanceRate >= 0.5) {
+    return "#40c463"; // 50-74% - medium green
+  } else if (attendanceRate > 0) {
+    return "#9be9a8"; // 1-49% - light green
+  } else {
+    return "#ff4444"; // 0% - red
+  }
+}
+
+// Modal functions
+async function showTotalSessionsModal() {
+  if (!totalSessionsModal) return;
+
+  totalSessionsList.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 2rem">Loading...</td></tr>`;
+  totalSessionsModal.showModal();
+
+  try {
+    const data = await apiFetch("/api/student/sessions/all");
+    const sessions = data.sessions || [];
+
+    if (!sessions.length) {
+      totalSessionsList.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 2rem">No sessions recorded yet.</td></tr>`;
+      return;
+    }
+
+    const rows = sessions
+      .map((session) => {
+        const sessionLabel = `${session.year || "–"}-${session.stream || "–"}-${session.division || "–"}`;
+        const date = new Date(session.session_date || session.created_at);
+        const formattedDate = date.toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const teacherName = session.teacher_name || "Unknown";
+        const subject = session.subject || "–";
+        const details = `started by ${teacherName} for ${subject} on ${formattedDate}`;
+
+        const statusClass = session.status === "P" ? "success" : "danger";
+        const statusText = session.status === "P" ? "Present" : "Absent";
+
+        return `
+          <tr>
+            <td><strong>${sessionLabel}</strong></td>
+            <td>${details}</td>
+            <td><span class="badge ${statusClass}">${statusText}</span></td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    totalSessionsList.innerHTML = rows;
+  } catch (error) {
+    totalSessionsList.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 2rem; color: var(--color-danger)">Failed to load sessions</td></tr>`;
+    handleError(error, "Unable to load all sessions");
+  }
+}
+
+async function showPresentSessionsModal() {
+  if (!presentSessionsModal) return;
+
+  presentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem">Loading...</td></tr>`;
+  presentSessionsModal.showModal();
+
+  try {
+    const data = await apiFetch("/api/student/sessions/present");
+    const sessions = data.sessions || [];
+
+    if (!sessions.length) {
+      presentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem">No sessions attended yet.</td></tr>`;
+      return;
+    }
+
+    const rows = sessions
+      .map((session) => {
+        const sessionLabel = `${session.year || "–"}-${session.stream || "–"}-${session.division || "–"}`;
+        const date = new Date(session.session_date);
+        const formattedDate = date.toLocaleDateString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        const subject = session.subject || "–";
+        const details = `on ${formattedDate} for ${subject}`;
+
+        return `
+          <tr>
+            <td><strong>${sessionLabel}</strong></td>
+            <td>${details}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    presentSessionsList.innerHTML = rows;
+  } catch (error) {
+    presentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem; color: var(--color-danger)">Failed to load sessions</td></tr>`;
+    handleError(error, "Unable to load present sessions");
+  }
+}
+
+async function showAbsentSessionsModal() {
+  if (!absentSessionsModal) return;
+
+  absentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem">Loading...</td></tr>`;
+  absentSessionsModal.showModal();
+
+  try {
+    const data = await apiFetch("/api/student/sessions/absent");
+    const sessions = data.sessions || [];
+
+    if (!sessions.length) {
+      absentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem">No absent sessions. Great job!</td></tr>`;
+      return;
+    }
+
+    const rows = sessions
+      .map((session) => {
+        const sessionLabel = `${session.year || "–"}-${session.stream || "–"}-${session.division || "–"}`;
+        const date = new Date(session.session_date);
+        const formattedDate = date.toLocaleDateString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        const subject = session.subject || "–";
+        const details = `on ${formattedDate} for ${subject}`;
+
+        return `
+          <tr>
+            <td><strong>${sessionLabel}</strong></td>
+            <td>${details}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    absentSessionsList.innerHTML = rows;
+  } catch (error) {
+    absentSessionsList.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 2rem; color: var(--color-danger)">Failed to load sessions</td></tr>`;
+    handleError(error, "Unable to load absent sessions");
+  }
 }
 
 function initControls() {
@@ -148,6 +522,32 @@ function initControls() {
     } catch (error) {
       handleError(error, "Unable to sign out");
     }
+  });
+
+  // Modal event listeners
+  showTotalSessionsButton?.addEventListener("click", showTotalSessionsModal);
+  showPresentSessionsButton?.addEventListener(
+    "click",
+    showPresentSessionsModal,
+  );
+  showAbsentSessionsButton?.addEventListener("click", showAbsentSessionsModal);
+
+  closeTotalSessionsButton?.addEventListener("click", () =>
+    totalSessionsModal?.close(),
+  );
+  closePresentSessionsButton?.addEventListener("click", () =>
+    presentSessionsModal?.close(),
+  );
+  closeAbsentSessionsButton?.addEventListener("click", () =>
+    absentSessionsModal?.close(),
+  );
+
+  // Calendar navigation event listeners
+  calendarPrevBtn?.addEventListener("click", previousMonth);
+  calendarNextBtn?.addEventListener("click", nextMonth);
+  calendarYearSelector?.addEventListener("change", (e) => {
+    currentCalendarYear = parseInt(e.target.value);
+    renderCalendar();
   });
 }
 

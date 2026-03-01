@@ -9,6 +9,10 @@ import {
 const summarySessionsEl = document.querySelector("[data-summary-sessions]");
 const summaryAverageEl = document.querySelector("[data-summary-average]");
 const summaryPresentEl = document.querySelector("[data-summary-present]");
+const summaryStreamsEl = document.querySelector("[data-summary-streams]");
+const summaryDivisionsEl = document.querySelector("[data-summary-divisions]");
+const summaryYearsEl = document.querySelector("[data-summary-years]");
+const summarySubjectsEl = document.querySelector("[data-summary-subjects]");
 const recentBody = document.querySelector("[data-recent-body]");
 const activityBody = document.querySelector("[data-activity-body]");
 const refreshButton = document.querySelector("[data-refresh]");
@@ -18,9 +22,6 @@ const clearActivityButton = document.querySelector("[data-clear-activity]");
 const signoutButton = document.querySelector("[data-signout]");
 const startSessionButton = document.querySelector("[data-start-session]");
 const endSessionButton = document.querySelector("[data-end-session]");
-const manualButton = document.querySelector("[data-open-manual]");
-const manualModal = document.querySelector("[data-manual-modal]");
-const manualForm = manualModal?.querySelector("form");
 const sessionModal = document.querySelector("[data-session-modal]");
 const sessionForm = sessionModal?.querySelector("form");
 const activeSection = document.querySelector("[data-active-session]");
@@ -33,6 +34,34 @@ const closeHistoryButton = document.querySelector("[data-close-history]");
 const previewModal = document.querySelector("[data-preview-modal]");
 const closePreviewButton = document.querySelector("[data-close-preview]");
 const previewStudentsBody = document.querySelector("[data-preview-students]");
+
+// Stats modals
+const showStreamsButton = document.querySelector("[data-show-streams]");
+const showDivisionsButton = document.querySelector("[data-show-divisions]");
+const showYearsButton = document.querySelector("[data-show-years]");
+const showSubjectsButton = document.querySelector("[data-show-subjects]");
+const showSessionsButton = document.querySelector("[data-show-sessions]");
+const showStudentsPresentButton = document.querySelector(
+  "[data-show-students-present]",
+);
+
+const streamsModal = document.querySelector("[data-streams-modal]");
+const divisionsModal = document.querySelector("[data-divisions-modal]");
+const yearsModal = document.querySelector("[data-years-modal]");
+const subjectsModal = document.querySelector("[data-subjects-modal]");
+const sessionsModal = document.querySelector("[data-sessions-modal]");
+const studentsPresentModal = document.querySelector(
+  "[data-students-present-modal]",
+);
+
+const closeStreamsButton = document.querySelector("[data-close-streams]");
+const closeDivisionsButton = document.querySelector("[data-close-divisions]");
+const closeYearsButton = document.querySelector("[data-close-years]");
+const closeSubjectsButton = document.querySelector("[data-close-subjects]");
+const closeSessionsButton = document.querySelector("[data-close-sessions]");
+const closeStudentsPresentButton = document.querySelector(
+  "[data-close-students-present]",
+);
 
 const snapshotSubject = document.querySelector("[data-session-subject]");
 const snapshotYear = document.querySelector("[data-session-year]");
@@ -51,6 +80,7 @@ let availableStreams = [];
 let availableDivisions = [];
 let availableYears = [];
 let availableSemesters = [];
+let recentSessionsData = [];
 
 function handleError(error, fallback = "Something went wrong") {
   console.error(error);
@@ -69,11 +99,29 @@ async function loadDashboard() {
     availableDivisions = data.divisions || [];
     availableYears = data.years || [];
     availableSemesters = data.semesters || [];
+    recentSessionsData = data?.recentSessions || [];
 
     const summary = data?.summary || {};
     summarySessionsEl.textContent = summary.sessions ?? 0;
     summaryAverageEl.textContent = `${summary.averagePercentage ?? 0}%`;
     summaryPresentEl.textContent = summary.totalPresent ?? 0;
+
+    // Update new stats
+    if (summaryStreamsEl)
+      summaryStreamsEl.textContent = availableStreams.length;
+    if (summaryDivisionsEl)
+      summaryDivisionsEl.textContent = availableDivisions.length;
+    if (summaryYearsEl) summaryYearsEl.textContent = availableYears.length;
+
+    // Count unique subjects - get from teacherInfo
+    const subjects = teacherData?.subject
+      ? teacherData.subject
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s)
+      : [];
+    if (summarySubjectsEl) summarySubjectsEl.textContent = subjects.length || 1;
+
     renderRecentSessions(data?.recentSessions || []);
 
     // Populate dropdowns
@@ -302,7 +350,7 @@ function renderRecentSessions(sessions) {
   if (!recentBody) return;
 
   if (!sessions.length) {
-    recentBody.innerHTML = `<tr><td colspan="6">No sessions recorded yet.</td></tr>`;
+    recentBody.innerHTML = `<tr><td colspan="8">No sessions recorded yet.</td></tr>`;
     return;
   }
 
@@ -317,6 +365,8 @@ function renderRecentSessions(sessions) {
         <tr>
           <td>${formatDateTime(session.started_at)}</td>
           <td>${session.subject || "—"}</td>
+          <td>${session.stream || "—"}</td>
+          <td>${session.year || "—"}</td>
           <td>${session.division || "—"}</td>
           <td>${present}</td>
           <td>${absent}</td>
@@ -396,7 +446,7 @@ function handleClearRecent() {
 
   if (recentBody) {
     recentBody.innerHTML =
-      '<tr><td colspan="6">Recent classes cleared.</td></tr>';
+      '<tr><td colspan="8">Recent classes cleared.</td></tr>';
     showToast({
       title: "Cleared",
       message: "Recent classes list has been cleared.",
@@ -778,57 +828,150 @@ async function handleEndSession() {
   }
 }
 
-async function handleManualOverride(event) {
-  event.preventDefault();
-  if (!manualForm) return;
+function showStreamsModal() {
+  if (!streamsModal) return;
 
-  const submitButton = manualForm.querySelector('button[value="submit"]');
-  const formData = new FormData(manualForm);
-  const payload = {
-    studentId: formData.get("studentId")?.trim(),
-    status: formData.get("status"),
-    reason: formData.get("reason")?.trim(),
-  };
-
-  if (!payload.studentId || !payload.status) {
-    showToast({
-      title: "Missing info",
-      message: "Student ID and status are required.",
-      type: "warning",
-    });
-    return;
+  const list = streamsModal.querySelector("[data-streams-list]");
+  if (list && availableStreams.length) {
+    list.innerHTML = availableStreams
+      .map(
+        (stream) =>
+          `<li style="padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 1rem;">${stream}</li>`,
+      )
+      .join("");
+  } else if (list) {
+    list.innerHTML = '<li style="padding: 0.75rem;">No streams assigned</li>';
   }
 
+  streamsModal.showModal();
+}
+
+function showDivisionsModal() {
+  if (!divisionsModal) return;
+
+  const list = divisionsModal.querySelector("[data-divisions-list]");
+  if (list && availableDivisions.length) {
+    list.innerHTML = availableDivisions
+      .map(
+        (division) =>
+          `<li style="padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 1rem;">${division}</li>`,
+      )
+      .join("");
+  } else if (list) {
+    list.innerHTML = '<li style="padding: 0.75rem;">No divisions assigned</li>';
+  }
+
+  divisionsModal.showModal();
+}
+
+function showYearsModal() {
+  if (!yearsModal) return;
+
+  const list = yearsModal.querySelector("[data-years-list]");
+  if (list && availableYears.length) {
+    list.innerHTML = availableYears
+      .map(
+        (year) =>
+          `<li style="padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 1rem;">${year}</li>`,
+      )
+      .join("");
+  } else if (list) {
+    list.innerHTML = '<li style="padding: 0.75rem;">No years assigned</li>';
+  }
+
+  yearsModal.showModal();
+}
+
+function showSubjectsModal() {
+  if (!subjectsModal) return;
+
+  const list = subjectsModal.querySelector("[data-subjects-list]");
+  const subjects = teacherData?.subject
+    ? teacherData.subject
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s)
+    : [];
+
+  if (list && subjects.length) {
+    list.innerHTML = subjects
+      .map(
+        (subject) =>
+          `<li style="padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 1rem;">${subject}</li>`,
+      )
+      .join("");
+  } else if (list) {
+    list.innerHTML = '<li style="padding: 0.75rem;">No subjects assigned</li>';
+  }
+
+  subjectsModal.showModal();
+}
+
+function showSessionsModal() {
+  if (!sessionsModal) return;
+
+  const list = sessionsModal.querySelector("[data-sessions-list]");
+
+  if (list && recentSessionsData.length) {
+    // Create unique class list from recent sessions
+    const uniqueClasses = new Set();
+    recentSessionsData.forEach((session) => {
+      const classFormat = `${session.year || "N/A"}-${session.stream || "N/A"}-${session.division || "N/A"}`;
+      uniqueClasses.add(classFormat);
+    });
+
+    list.innerHTML = Array.from(uniqueClasses)
+      .map(
+        (classInfo) =>
+          `<li style="padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 1rem;">${classInfo}</li>`,
+      )
+      .join("");
+  } else if (list) {
+    list.innerHTML = '<li style="padding: 0.75rem;">No sessions found</li>';
+  }
+
+  sessionsModal.showModal();
+}
+
+async function showStudentsPresentModal() {
+  if (!studentsPresentModal) return;
+
+  const list = studentsPresentModal.querySelector(
+    "[data-students-present-list]",
+  );
+
+  if (!list) return;
+
+  list.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+  studentsPresentModal.showModal();
+
   try {
-    toggleLoading(submitButton, true);
-    await apiFetch("/api/teacher/attendance/manual", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    // Fetch all students who have been marked present at least once
+    const response = await apiFetch("/api/teacher/students/present");
+    const students = response.students || [];
 
-    if (currentSession) {
-      const student = currentSession.students.find(
-        (item) => item.id === payload.studentId,
-      );
-      if (student) {
-        student.status = payload.status === "P" ? "P" : "A";
-        renderActiveSession();
-      }
+    if (students.length) {
+      list.innerHTML = students
+        .map(
+          (student) => `
+        <tr>
+          <td>${student.roll_no || "—"}</td>
+          <td>${student.student_id || "—"}</td>
+          <td>${student.student_name || "—"}</td>
+          <td>${student.year || "—"}</td>
+          <td>${student.stream || "—"}</td>
+          <td>${student.division || "—"}</td>
+        </tr>
+      `,
+        )
+        .join("");
+    } else {
+      list.innerHTML =
+        '<tr><td colspan="6">No students marked present yet</td></tr>';
     }
-
-    showToast({
-      title: "Override saved",
-      message: "Manual attendance override recorded.",
-      type: "success",
-    });
-
-    manualForm.reset();
-    manualModal.close();
-    loadActivity();
   } catch (error) {
-    handleError(error, "Unable to save manual override");
-  } finally {
-    toggleLoading(submitButton, false);
+    list.innerHTML = '<tr><td colspan="6">Failed to load students</td></tr>';
+    handleError(error, "Unable to load students present data");
   }
 }
 
@@ -923,24 +1066,27 @@ function initDialogs() {
     }
   }
 
-  if (manualButton && manualModal && manualForm) {
-    manualButton.addEventListener("click", () => {
-      manualForm.reset();
-      manualModal.showModal();
-    });
+  // Stats modal event listeners
+  showStreamsButton?.addEventListener("click", showStreamsModal);
+  showDivisionsButton?.addEventListener("click", showDivisionsModal);
+  showYearsButton?.addEventListener("click", showYearsModal);
+  showSubjectsButton?.addEventListener("click", showSubjectsModal);
+  showSessionsButton?.addEventListener("click", showSessionsModal);
+  showStudentsPresentButton?.addEventListener(
+    "click",
+    showStudentsPresentModal,
+  );
 
-    manualForm.addEventListener("submit", handleManualOverride);
-
-    // Handle cancel button
-    const cancelManualButton = manualModal.querySelector(
-      "[data-cancel-manual]",
-    );
-    if (cancelManualButton) {
-      cancelManualButton.addEventListener("click", () => {
-        manualModal.close();
-      });
-    }
-  }
+  closeStreamsButton?.addEventListener("click", () => streamsModal?.close());
+  closeDivisionsButton?.addEventListener("click", () =>
+    divisionsModal?.close(),
+  );
+  closeYearsButton?.addEventListener("click", () => yearsModal?.close());
+  closeSubjectsButton?.addEventListener("click", () => subjectsModal?.close());
+  closeSessionsButton?.addEventListener("click", () => sessionsModal?.close());
+  closeStudentsPresentButton?.addEventListener("click", () =>
+    studentsPresentModal?.close(),
+  );
 }
 
 function initControls() {
@@ -1000,12 +1146,12 @@ async function loadAttendanceHistory() {
   if (!historyBody) return;
 
   try {
-    historyBody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+    historyBody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     const { history } = await apiFetch("/api/teacher/attendance/history");
 
     if (!history || !history.length) {
       historyBody.innerHTML =
-        '<tr><td colspan="6">No attendance history found.</td></tr>';
+        '<tr><td colspan="7">No attendance history found.</td></tr>';
       return;
     }
 
@@ -1017,6 +1163,7 @@ async function loadAttendanceHistory() {
           <td>${item.filename || "—"}</td>
           <td>${item.subject || "—"}</td>
           <td>${item.stream || "—"}</td>
+          <td>${item.year || "—"}</td>
           <td>${item.division || "—"}</td>
           <td>${savedDate}</td>
           <td>

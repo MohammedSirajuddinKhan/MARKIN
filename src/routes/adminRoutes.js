@@ -28,6 +28,7 @@ import {
   getStudentStreams,
 } from "../controllers/adminController.js";
 import { requireAuth, requireRole } from "../middlewares/authMiddleware.js";
+import notificationService from "../services/notificationService.js";
 
 const router = Router();
 

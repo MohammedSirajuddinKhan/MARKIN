@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -63,17 +63,23 @@
           </div>
         </header>
 
-        <section class="layout-grid three" data-summary>
-          <div class="card">
+        <section class="layout-grid four" data-summary>
+          <div class="card" style="cursor: pointer" data-show-total-sessions>
             <div class="stat">
               <span class="stat-label">Total Sessions</span>
               <span class="stat-value" data-summary-sessions>0</span>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-show-present-sessions>
             <div class="stat">
               <span class="stat-label">Present</span>
               <span class="stat-value" data-summary-present>0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-show-absent-sessions>
+            <div class="stat">
+              <span class="stat-label">Absent</span>
+              <span class="stat-value" data-summary-absent>0</span>
             </div>
           </div>
           <div class="card">
@@ -111,6 +117,87 @@
         </section>
 
         <section class="card">
+          <h3>Attendance Calendar</h3>
+          <p class="tagline" style="margin-top: 0.5rem">
+            Your attendance over time
+          </p>
+          <div style="margin-top: 1.5rem">
+            <!-- Calendar Navigation -->
+            <div class="calendar-navigation">
+              <button class="calendar-nav-btn" data-calendar-prev-btn>
+                &larr; Previous
+              </button>
+              <div class="calendar-month-display">
+                <span data-calendar-month-display>Loading...</span>
+                <select
+                  class="calendar-year-selector"
+                  data-calendar-year-selector
+                >
+                  <!-- Years will be populated by JavaScript -->
+                </select>
+              </div>
+              <button class="calendar-nav-btn" data-calendar-next-btn>
+                Next &rarr;
+              </button>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="calendar-container" data-calendar-container>
+              <div
+                style="
+                  text-align: center;
+                  padding: 2rem;
+                  color: var(--color-muted);
+                "
+              >
+                Loading calendar...
+              </div>
+            </div>
+
+            <!-- Calendar Legend -->
+            <div
+              class="calendar-legend"
+              style="
+                margin-top: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                font-size: 0.85rem;
+              "
+            >
+              <span style="color: var(--color-muted)">Less</span>
+              <div style="display: flex; gap: 3px">
+                <div
+                  class="calendar-day"
+                  style="background-color: var(--color-border)"
+                ></div>
+                <div
+                  class="calendar-day"
+                  style="background-color: #ff4444"
+                ></div>
+                <div
+                  class="calendar-day"
+                  style="background-color: #9be9a8"
+                ></div>
+                <div
+                  class="calendar-day"
+                  style="background-color: #40c463"
+                ></div>
+                <div
+                  class="calendar-day"
+                  style="background-color: #30a14e"
+                ></div>
+                <div
+                  class="calendar-day"
+                  style="background-color: #216e39"
+                ></div>
+              </div>
+              <span style="color: var(--color-muted)">More</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
           <h3>Recent Attendance</h3>
           <div class="table-wrapper" style="margin-top: 1rem">
             <table>
@@ -118,12 +205,15 @@
                 <tr>
                   <th>Date</th>
                   <th>Subject</th>
+                  <th>Year</th>
+                  <th>Stream</th>
+                  <th>Division</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody data-attendance-body>
                 <tr>
-                  <td colspan="3">No attendance records yet.</td>
+                  <td colspan="6">No attendance records yet.</td>
                 </tr>
               </tbody>
             </table>
@@ -137,6 +227,9 @@
               <thead>
                 <tr>
                   <th>Month</th>
+                  <th>Year</th>
+                  <th>Stream</th>
+                  <th>Division</th>
                   <th>Sessions</th>
                   <th>Present</th>
                   <th>Absent</th>
@@ -145,7 +238,7 @@
               </thead>
               <tbody data-monthly-body>
                 <tr>
-                  <td colspan="5">No data available.</td>
+                  <td colspan="8">No data available.</td>
                 </tr>
               </tbody>
             </table>
@@ -153,6 +246,109 @@
         </section>
       </main>
     </div>
+
+    <!-- Total Sessions Modal -->
+    <dialog data-total-sessions-modal>
+      <div class="card" style="min-width: 500px; max-width: 800px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+          "
+        >
+          <h3>All Sessions</h3>
+          <button class="btn ghost" data-close-total-sessions>✕</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Details</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody data-total-sessions-list>
+              <tr>
+                <td colspan="3" style="text-align: center; padding: 2rem">
+                  Loading...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Present Sessions Modal -->
+    <dialog data-present-sessions-modal>
+      <div class="card" style="min-width: 500px; max-width: 800px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+          "
+        >
+          <h3>Sessions You Attended</h3>
+          <button class="btn ghost" data-close-present-sessions>✕</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody data-present-sessions-list>
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 2rem">
+                  Loading...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Absent Sessions Modal -->
+    <dialog data-absent-sessions-modal>
+      <div class="card" style="min-width: 500px; max-width: 800px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+          "
+        >
+          <h3>Sessions You Missed</h3>
+          <button class="btn ghost" data-close-absent-sessions>✕</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody data-absent-sessions-list>
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 2rem">
+                  Loading...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
 
     <div class="toast-stack" data-toast-stack></div>
     <script type="module" src="/js/student.js"></script>

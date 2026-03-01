@@ -28,9 +28,6 @@
           <button class="btn secondary" data-start-session>
             Start attendance
           </button>
-          <button class="btn secondary" data-open-manual>
-            Manual override
-          </button>
           <button
             class="btn"
             data-generate-defaulters
@@ -85,8 +82,12 @@
           </div>
         </header>
 
-        <section class="layout-grid three" data-summary>
-          <div class="card">
+        <section
+          class="layout-grid"
+          style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))"
+          data-summary
+        >
+          <div class="card" style="cursor: pointer" data-show-sessions>
             <div class="stat">
               <span class="stat-label">Sessions</span>
               <span class="stat-value" data-summary-sessions>0</span>
@@ -98,10 +99,34 @@
               <span class="stat-value" data-summary-average>0%</span>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-show-students-present>
             <div class="stat">
-              <span class="stat-label">Students present</span>
+              <span class="stat-label">Total Students</span>
               <span class="stat-value" data-summary-present>0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-show-streams>
+            <div class="stat">
+              <span class="stat-label">Streams</span>
+              <span class="stat-value" data-summary-streams>0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-show-divisions>
+            <div class="stat">
+              <span class="stat-label">Divisions</span>
+              <span class="stat-value" data-summary-divisions>0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-show-years>
+            <div class="stat">
+              <span class="stat-label">Years</span>
+              <span class="stat-value" data-summary-years>0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-show-subjects>
+            <div class="stat">
+              <span class="stat-label">Subjects</span>
+              <span class="stat-value" data-summary-subjects>0</span>
             </div>
           </div>
         </section>
@@ -176,6 +201,8 @@
                 <tr>
                   <th>When</th>
                   <th>Subject</th>
+                  <th>Stream</th>
+                  <th>Year</th>
                   <th>Division</th>
                   <th>Present</th>
                   <th>Absent</th>
@@ -184,7 +211,7 @@
               </thead>
               <tbody data-recent-body>
                 <tr>
-                  <td colspan="6">No sessions recorded yet.</td>
+                  <td colspan="8">No sessions recorded yet.</td>
                 </tr>
               </tbody>
             </table>
@@ -225,41 +252,6 @@
         </section>
       </main>
     </div>
-
-    <dialog
-      data-manual-modal
-      style="
-        border: none;
-        border-radius: 16px;
-        padding: 2rem;
-        width: min(420px, 90vw);
-      "
-    >
-      <form method="dialog" class="layout-grid" style="gap: 1rem">
-        <h3>Manual override</h3>
-        <div class="input-group">
-          <label for="manualStudentId">Student ID</label>
-          <input id="manualStudentId" name="studentId" required />
-        </div>
-        <div class="input-group">
-          <label for="manualStatus">Status</label>
-          <select id="manualStatus" name="status" required>
-            <option value="P">Present</option>
-            <option value="A">Absent</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label for="manualReason">Reason (optional)</label>
-          <textarea id="manualReason" name="reason" rows="3"></textarea>
-        </div>
-        <menu style="display: flex; gap: 0.75rem; justify-content: flex-end">
-          <button type="button" class="btn secondary" data-cancel-manual>
-            Cancel
-          </button>
-          <button type="submit" class="btn" value="submit">Confirm</button>
-        </menu>
-      </form>
-    </dialog>
 
     <dialog
       data-session-modal
@@ -355,6 +347,7 @@
                 <th>Filename</th>
                 <th>Subject</th>
                 <th>Stream</th>
+                <th>Year</th>
                 <th>Division</th>
                 <th>Saved</th>
                 <th>Action</th>
@@ -362,7 +355,7 @@
             </thead>
             <tbody data-history-body>
               <tr>
-                <td colspan="6">Loading...</td>
+                <td colspan="7">Loading...</td>
               </tr>
             </tbody>
           </table>
@@ -809,6 +802,219 @@
             </div>
           </menu>
         </form>
+      </div>
+    </dialog>
+
+    <!-- Teacher Stats Dialogs -->
+    <dialog
+      data-streams-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(500px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>My Streams</h3>
+          <button type="button" class="btn ghost" data-close-streams>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <ul style="list-style: none; padding: 0" data-streams-list>
+            <li style="padding: 0.75rem; border-bottom: 1px solid #eee">
+              Loading...
+            </li>
+          </ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog
+      data-divisions-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(500px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>My Divisions</h3>
+          <button type="button" class="btn ghost" data-close-divisions>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <ul style="list-style: none; padding: 0" data-divisions-list>
+            <li style="padding: 0.75rem; border-bottom: 1px solid #eee">
+              Loading...
+            </li>
+          </ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog
+      data-years-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(500px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>My Years</h3>
+          <button type="button" class="btn ghost" data-close-years>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <ul style="list-style: none; padding: 0" data-years-list>
+            <li style="padding: 0.75rem; border-bottom: 1px solid #eee">
+              Loading...
+            </li>
+          </ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog
+      data-subjects-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(500px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>My Subjects</h3>
+          <button type="button" class="btn ghost" data-close-subjects>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <ul style="list-style: none; padding: 0" data-subjects-list>
+            <li style="padding: 0.75rem; border-bottom: 1px solid #eee">
+              Loading...
+            </li>
+          </ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog
+      data-sessions-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(600px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>My Sessions</h3>
+          <button type="button" class="btn ghost" data-close-sessions>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <ul style="list-style: none; padding: 0" data-sessions-list>
+            <li style="padding: 0.75rem; border-bottom: 1px solid #eee">
+              Loading...
+            </li>
+          </ul>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog
+      data-students-present-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(800px, 90vw);
+        max-height: 70vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>Mapped Students</h3>
+          <button type="button" class="btn ghost" data-close-students-present>
+            Close
+          </button>
+        </div>
+        <div style="max-height: 50vh; overflow-y: auto">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Roll No</th>
+                  <th>Student ID</th>
+                  <th>Name</th>
+                  <th>Year</th>
+                  <th>Stream</th>
+                  <th>Division</th>
+                </tr>
+              </thead>
+              <tbody data-students-present-list>
+                <tr>
+                  <td colspan="6">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </dialog>
 

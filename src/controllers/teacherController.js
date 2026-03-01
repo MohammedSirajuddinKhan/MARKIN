@@ -426,6 +426,19 @@ export async function teacherActivityLog(req, res, next) {
   }
 }
 
+export async function getStudentsPresent(req, res, next) {
+  try {
+    const teacherId = req.session.user.id;
+
+    // Get all students mapped to this teacher
+    const students = await getMappedStudents(teacherId);
+
+    res.json({ students });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function saveAttendanceBackup(req, res, next) {
   try {
     const teacherId = req.session.user.id;
@@ -502,7 +515,7 @@ export async function downloadAttendanceBackup(req, res, next) {
     const backupId = req.params.id;
 
     const [backup] = await pool.query(
-      `SELECT filename, file_content 
+      `SELECT filename, session_id, subject, year, semester, stream, division, started_at, records, teacher_id
        FROM attendance_backup 
        WHERE id = ? AND teacher_id = ?`,
       [backupId, teacherId],
@@ -512,39 +525,161 @@ export async function downloadAttendanceBackup(req, res, next) {
       return res.status(404).json({ message: "Backup not found" });
     }
 
-    if (!backup[0].file_content) {
-      return res.status(404).json({ message: "File content not found" });
-    }
+    const record = backup[0];
 
-    let csvContent;
+    // Parse the records JSON to get student details
+    let students = [];
     try {
-      // Try to decode as base64 first
-      csvContent = Buffer.from(backup[0].file_content, "base64").toString(
-        "utf-8",
-      );
-
-      // Verify it's valid CSV by checking if it starts with expected content
-      // If decoded content looks like base64 gibberish, it might already be plain text
-      if (
-        !csvContent.includes('"') &&
-        !csvContent.includes(",") &&
-        backup[0].file_content.includes(",")
-      ) {
-        // The original was probably already plain text
-        csvContent = backup[0].file_content;
-      }
+      students = JSON.parse(record.records || "[]");
     } catch (err) {
-      // If base64 decoding fails, assume it's already plain text
-      csvContent = backup[0].file_content;
+      console.error("Failed to parse records:", err);
+      return res.status(500).json({ message: "Invalid backup data" });
     }
 
-    // Set headers for CSV file
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    // Get teacher name
+    const [teacherInfo] = await pool.query(
+      `SELECT name FROM teacher_details_db WHERE teacher_id = ?`,
+      [teacherId],
+    );
+    const teacherName = teacherInfo?.[0]?.name || "Teacher";
+
+    // Calculate summary
+    const present = students.filter((s) => s.status === "P").length;
+    const absent = students.filter((s) => s.status === "A").length;
+
+    // Create Excel workbook with ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Attendance Report");
+
+    // Set column widths
+    worksheet.columns = [
+      { width: 12 }, // Roll No
+      { width: 15 }, // Student ID
+      { width: 30 }, // Name
+      { width: 12 }, // Status
+    ];
+
+    // Add college header (merged across all columns)
+    worksheet.mergeCells("A1:D1");
+    const headerCell = worksheet.getCell("A1");
+    headerCell.value =
+      "Sheth N.K.T.T. College of Commerce & Sheth J.T.T. College of Arts (Autonomous) Thane West - 400601";
+    headerCell.font = { bold: true, size: 12 };
+    headerCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(1).height = 30;
+
+    // Add title (merged across all columns)
+    worksheet.mergeCells("A3:D3");
+    const titleCell = worksheet.getCell("A3");
+    titleCell.value = "Attendance Report";
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(3).height = 25;
+
+    // Add session metadata
+    let currentRow = 5;
+    const metadata = [
+      ["Session ID:", record.session_id || ""],
+      ["Subject:", record.subject || ""],
+      ["Year:", record.year || ""],
+      ["Semester:", record.semester || ""],
+      ["Stream:", record.stream || ""],
+      ["Division:", record.division || ""],
+      ["Teacher:", teacherName],
+      [
+        "Date & Time:",
+        record.started_at ? new Date(record.started_at).toLocaleString() : "",
+      ],
+      ["Present:", present.toString()],
+      ["Absent:", absent.toString()],
+    ];
+
+    metadata.forEach((meta) => {
+      const row = worksheet.getRow(currentRow);
+      row.getCell(1).value = meta[0];
+      row.getCell(1).font = { bold: true };
+      row.getCell(2).value = meta[1];
+      currentRow++;
+    });
+
+    currentRow++; // Empty row
+
+    // Add student attendance header
+    const headerRow = worksheet.getRow(currentRow);
+    headerRow.values = ["Roll No", "Student ID", "Name", "Status"];
+    headerRow.font = { bold: true, size: 11 };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    headerRow.alignment = { horizontal: "center", vertical: "middle" };
+    currentRow++;
+
+    // Add student rows with color coding
+    students.forEach((student) => {
+      const isPresent = student.status === "P";
+      const row = worksheet.getRow(currentRow);
+
+      row.values = [
+        student.rollNo || "",
+        student.studentId || "",
+        student.name || "",
+        isPresent ? "Present" : "Absent",
+      ];
+
+      // Apply color based on status
+      const fillColor = isPresent
+        ? { argb: "FFD4EDDA" } // Light green for present
+        : { argb: "FFF8D7DA" }; // Light red for absent
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: fillColor,
+        };
+        cell.alignment = { vertical: "middle" };
+      });
+
+      // Make status cell bold with appropriate color
+      row.getCell(4).font = {
+        bold: true,
+        color: { argb: isPresent ? "FF28A745" : "FFDC3545" },
+      };
+      row.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+
+      currentRow++;
+    });
+
+    // Add borders to all cells in the student table
+    const tableStartRow = currentRow - students.length - 1;
+    const tableEndRow = currentRow - 1;
+    for (let row = tableStartRow; row <= tableEndRow; row++) {
+      for (let col = 1; col <= 4; col++) {
+        const cell = worksheet.getRow(row).getCell(col);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      }
+    }
+
+    // Generate Excel file and send as response
+    const excelFilename = record.filename.replace(/\.csv$/i, ".xlsx");
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${backup[0].filename}"`,
+      `attachment; filename="${excelFilename}"`,
     );
-    return res.send(csvContent);
+
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
     return next(error);
   }
@@ -719,49 +854,122 @@ export async function exportAttendanceExcel(req, res, next) {
       return res.status(400).json({ message: "Students data is required" });
     }
 
-    // Generate CSV content
-    const csvRows = [];
+    // Create Excel workbook with ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Attendance Report");
 
-    // College header
-    csvRows.push(
-      '"Sheth N.K.T.T. College of Commerce & Sheth J.T.T. College of Arts (Autonomous) Thane West - 400601"',
-    );
-    csvRows.push(""); // Empty row
-    csvRows.push('"Attendance Report"');
-    csvRows.push(""); // Empty row
+    // Set column widths
+    worksheet.columns = [
+      { width: 12 }, // Roll No
+      { width: 15 }, // Student ID
+      { width: 30 }, // Name
+      { width: 12 }, // Status
+    ];
 
-    // Session metadata
-    csvRows.push(`"Session ID:","${sessionId || ""}"`);
-    csvRows.push(`"Subject:","${subject || ""}"`);
-    csvRows.push(`"Year:","${year || ""}"`);
-    csvRows.push(`"Semester:","${semester || ""}"`);
-    csvRows.push(`"Stream:","${stream || ""}"`);
-    csvRows.push(`"Division:","${division || ""}"`);
-    csvRows.push(`"Teacher:","${teacherName || ""}"`);
-    csvRows.push(
-      `"Date & Time:","${startedAt ? new Date(startedAt).toLocaleString() : ""}"`,
-    );
-    csvRows.push(`"Present:","${summary?.present || 0}"`);
-    csvRows.push(`"Absent:","${summary?.absent || 0}"`);
-    csvRows.push(""); // Empty row
+    // Add college header (merged across all columns)
+    worksheet.mergeCells("A1:D1");
+    const headerCell = worksheet.getCell("A1");
+    headerCell.value =
+      "Sheth N.K.T.T. College of Commerce & Sheth J.T.T. College of Arts (Autonomous) Thane West - 400601";
+    headerCell.font = { bold: true, size: 12 };
+    headerCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(1).height = 30;
 
-    // Student attendance header
-    csvRows.push('"Roll No","Student ID","Name","Status"');
+    // Add title (merged across all columns)
+    worksheet.mergeCells("A3:D3");
+    const titleCell = worksheet.getCell("A3");
+    titleCell.value = "Attendance Report";
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(3).height = 25;
 
-    // Student rows
-    students.forEach((student) => {
-      const isPresent = student.status === "P";
-      const rollNo = (student.rollNo || "").toString().replace(/"/g, '""');
-      const studentId = (student.studentId || "")
-        .toString()
-        .replace(/"/g, '""');
-      const name = (student.name || "").toString().replace(/"/g, '""');
-      const status = isPresent ? "Present" : "Absent";
+    // Add session metadata
+    let currentRow = 5;
+    const metadata = [
+      ["Session ID:", sessionId || ""],
+      ["Subject:", subject || ""],
+      ["Year:", year || ""],
+      ["Semester:", semester || ""],
+      ["Stream:", stream || ""],
+      ["Division:", division || ""],
+      ["Teacher:", teacherName || ""],
+      ["Date & Time:", startedAt ? new Date(startedAt).toLocaleString() : ""],
+      ["Present:", (summary?.present || 0).toString()],
+      ["Absent:", (summary?.absent || 0).toString()],
+    ];
 
-      csvRows.push(`"${rollNo}","${studentId}","${name}","${status}"`);
+    metadata.forEach((meta) => {
+      const row = worksheet.getRow(currentRow);
+      row.getCell(1).value = meta[0];
+      row.getCell(1).font = { bold: true };
+      row.getCell(2).value = meta[1];
+      currentRow++;
     });
 
-    const csvContent = csvRows.join("\n");
+    currentRow++; // Empty row
+
+    // Add student attendance header
+    const headerRow = worksheet.getRow(currentRow);
+    headerRow.values = ["Roll No", "Student ID", "Name", "Status"];
+    headerRow.font = { bold: true, size: 11 };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    headerRow.alignment = { horizontal: "center", vertical: "middle" };
+    currentRow++;
+
+    // Add student rows with color coding
+    students.forEach((student) => {
+      const isPresent = student.status === "P";
+      const row = worksheet.getRow(currentRow);
+
+      row.values = [
+        student.rollNo || "",
+        student.studentId || "",
+        student.name || "",
+        isPresent ? "Present" : "Absent",
+      ];
+
+      // Apply color based on status
+      const fillColor = isPresent
+        ? { argb: "FFD4EDDA" } // Light green for present
+        : { argb: "FFF8D7DA" }; // Light red for absent
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: fillColor,
+        };
+        cell.alignment = { vertical: "middle" };
+      });
+
+      // Make status cell bold with appropriate color
+      row.getCell(4).font = {
+        bold: true,
+        color: { argb: isPresent ? "FF28A745" : "FFDC3545" },
+      };
+      row.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+
+      currentRow++;
+    });
+
+    // Add borders to all cells in the student table
+    const tableStartRow = currentRow - students.length - 1;
+    const tableEndRow = currentRow - 1;
+    for (let row = tableStartRow; row <= tableEndRow; row++) {
+      for (let col = 1; col <= 4; col++) {
+        const cell = worksheet.getRow(row).getCell(col);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      }
+    }
 
     // Generate filename
     const timestamp = new Date(startedAt || Date.now())
@@ -777,16 +985,20 @@ export async function exportAttendanceExcel(req, res, next) {
       .replace(", ", "_");
 
     const subjectName = (subject || "session").replace(/[^a-z0-9_]/gi, "_");
-    const filename = `${timestamp}_${subjectName}_attendance_record.csv`;
+    const filename = `${timestamp}_${subjectName}_attendance_record.xlsx`;
 
-    // Set proper headers for CSV file download
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    // Set proper headers for Excel file download
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-    // Send CSV content
-    res.send(csvContent);
+    // Send Excel content
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
-    console.error("CSV export error:", error);
+    console.error("Excel export error:", error);
     return next(error);
   }
 }

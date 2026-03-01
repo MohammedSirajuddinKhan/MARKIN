@@ -416,7 +416,7 @@ export async function downloadAttendanceBackup(req, res, next) {
     const backupId = req.params.id;
 
     const [backup] = await pool.query(
-      `SELECT filename, file_content FROM attendance_backup WHERE id = ?`,
+      `SELECT filename, session_id, subject, year, semester, stream, division, started_at, records, teacher_id FROM attendance_backup WHERE id = ?`,
       [backupId],
     );
 
@@ -424,38 +424,161 @@ export async function downloadAttendanceBackup(req, res, next) {
       return res.status(404).json({ message: "Backup not found" });
     }
 
-    if (!backup[0].file_content) {
-      return res.status(404).json({ message: "File content not found" });
-    }
+    const record = backup[0];
 
-    let csvContent;
+    // Parse the records JSON to get student details
+    let students = [];
     try {
-      // Try to decode as base64 first
-      csvContent = Buffer.from(backup[0].file_content, "base64").toString(
-        "utf-8",
-      );
-
-      // Verify it's valid CSV by checking if it starts with expected content
-      // If decoded content looks like base64 gibberish, it might already be plain text
-      if (
-        !csvContent.includes('"') &&
-        !csvContent.includes(",") &&
-        backup[0].file_content.includes(",")
-      ) {
-        // The original was probably already plain text
-        csvContent = backup[0].file_content;
-      }
+      students = JSON.parse(record.records || "[]");
     } catch (err) {
-      // If base64 decoding fails, assume it's already plain text
-      csvContent = backup[0].file_content;
+      console.error("Failed to parse records:", err);
+      return res.status(500).json({ message: "Invalid backup data" });
     }
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    // Get teacher name
+    const [teacherInfo] = await pool.query(
+      `SELECT name FROM teacher_details_db WHERE teacher_id = ?`,
+      [record.teacher_id],
+    );
+    const teacherName = teacherInfo?.[0]?.name || "Teacher";
+
+    // Calculate summary
+    const present = students.filter((s) => s.status === "P").length;
+    const absent = students.filter((s) => s.status === "A").length;
+
+    // Create Excel workbook with ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Attendance Report");
+
+    // Set column widths
+    worksheet.columns = [
+      { width: 12 }, // Roll No
+      { width: 15 }, // Student ID
+      { width: 30 }, // Name
+      { width: 12 }, // Status
+    ];
+
+    // Add college header (merged across all columns)
+    worksheet.mergeCells("A1:D1");
+    const headerCell = worksheet.getCell("A1");
+    headerCell.value =
+      "Sheth N.K.T.T. College of Commerce & Sheth J.T.T. College of Arts (Autonomous) Thane West - 400601";
+    headerCell.font = { bold: true, size: 12 };
+    headerCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(1).height = 30;
+
+    // Add title (merged across all columns)
+    worksheet.mergeCells("A3:D3");
+    const titleCell = worksheet.getCell("A3");
+    titleCell.value = "Attendance Report";
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(3).height = 25;
+
+    // Add session metadata
+    let currentRow = 5;
+    const metadata = [
+      ["Session ID:", record.session_id || ""],
+      ["Subject:", record.subject || ""],
+      ["Year:", record.year || ""],
+      ["Semester:", record.semester || ""],
+      ["Stream:", record.stream || ""],
+      ["Division:", record.division || ""],
+      ["Teacher:", teacherName],
+      [
+        "Date & Time:",
+        record.started_at ? new Date(record.started_at).toLocaleString() : "",
+      ],
+      ["Present:", present.toString()],
+      ["Absent:", absent.toString()],
+    ];
+
+    metadata.forEach((meta) => {
+      const row = worksheet.getRow(currentRow);
+      row.getCell(1).value = meta[0];
+      row.getCell(1).font = { bold: true };
+      row.getCell(2).value = meta[1];
+      currentRow++;
+    });
+
+    currentRow++; // Empty row
+
+    // Add student attendance header
+    const headerRow = worksheet.getRow(currentRow);
+    headerRow.values = ["Roll No", "Student ID", "Name", "Status"];
+    headerRow.font = { bold: true, size: 11 };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD3D3D3" },
+    };
+    headerRow.alignment = { horizontal: "center", vertical: "middle" };
+    currentRow++;
+
+    // Add student rows with color coding
+    students.forEach((student) => {
+      const isPresent = student.status === "P";
+      const row = worksheet.getRow(currentRow);
+
+      row.values = [
+        student.rollNo || "",
+        student.studentId || "",
+        student.name || "",
+        isPresent ? "Present" : "Absent",
+      ];
+
+      // Apply color based on status
+      const fillColor = isPresent
+        ? { argb: "FFD4EDDA" } // Light green for present
+        : { argb: "FFF8D7DA" }; // Light red for absent
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: fillColor,
+        };
+        cell.alignment = { vertical: "middle" };
+      });
+
+      // Make status cell bold with appropriate color
+      row.getCell(4).font = {
+        bold: true,
+        color: { argb: isPresent ? "FF28A745" : "FFDC3545" },
+      };
+      row.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+
+      currentRow++;
+    });
+
+    // Add borders to all cells in the student table
+    const tableStartRow = currentRow - students.length - 1;
+    const tableEndRow = currentRow - 1;
+    for (let row = tableStartRow; row <= tableEndRow; row++) {
+      for (let col = 1; col <= 4; col++) {
+        const cell = worksheet.getRow(row).getCell(col);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      }
+    }
+
+    // Generate Excel file and send as response
+    const excelFilename = record.filename.replace(/\.csv$/i, ".xlsx");
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${backup[0].filename}"`,
+      `attachment; filename="${excelFilename}"`,
     );
-    return res.send(csvContent);
+
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
     return next(error);
   }

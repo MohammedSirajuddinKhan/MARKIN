@@ -122,8 +122,16 @@ export async function getTeacherStats(teacherId) {
     ? Math.round(((summary.total_present || 0) / total) * 100)
     : 0;
 
+  // Get total mapped students count
+  const [mappedCount] = await pool.query(
+    `SELECT COUNT(DISTINCT student_id) as count
+     FROM teacher_student_map
+     WHERE teacher_id = ?`,
+    [teacherId],
+  );
+
   const [recentSessions] = await pool.query(
-    `SELECT session_id, subject, division, started_at, present_count, absent_count
+    `SELECT session_id, subject, division, stream, year, started_at, present_count, absent_count
      FROM attendance_sessions
      WHERE teacher_id = ?
      ORDER BY started_at DESC
@@ -134,7 +142,7 @@ export async function getTeacherStats(teacherId) {
   return {
     summary: {
       sessions: summary.session_count || 0,
-      totalPresent: summary.total_present || 0,
+      totalPresent: mappedCount[0]?.count || 0,
       totalAbsent: summary.total_absent || 0,
       averagePercentage: average,
     },
@@ -159,7 +167,7 @@ export async function getStudentStats(studentId) {
   const percentage = total ? Math.round((present / total) * 100) : 0;
 
   const [recentSessions] = await pool.query(
-    `SELECT session_date, subject, status
+    `SELECT session_date, subject, status, year, stream, division
      FROM attendance_records
      WHERE student_id = ?
      ORDER BY session_date DESC
