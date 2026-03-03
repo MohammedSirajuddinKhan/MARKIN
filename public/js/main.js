@@ -5,7 +5,10 @@ console.log("📌 Toast stack element:", toastStack);
 
 export function showToast({ title, message, type = "info" }) {
   if (!toastStack) {
-    console.warn("⚠️ Toast stack not found, cannot show toast:", { title, message });
+    console.warn("⚠️ Toast stack not found, cannot show toast:", {
+      title,
+      message,
+    });
     return;
   }
 
