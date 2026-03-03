@@ -24,11 +24,6 @@
           </div>
         </div>
 
-        <nav class="sidebar">
-          <a href="#" class="btn secondary" data-nav="overview">Dashboard</a>
-          <a href="/" class="btn ghost" data-signout>Sign out</a>
-        </nav>
-
         <div class="card" style="margin-top: 2rem">
           <h3>Import Checklist</h3>
           <ul
@@ -45,6 +40,10 @@
             <li>3 · Confirm Import</li>
           </ul>
         </div>
+
+        <nav class="sidebar" style="margin-top: 2rem">
+          <a href="/" class="btn ghost" data-signout>Sign out</a>
+        </nav>
       </aside>
 
       <main class="content-panel layout-grid" style="gap: 1.5rem">
@@ -73,25 +72,31 @@
           style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))"
           data-dashboard-panels
         >
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-stat-card="students">
             <div class="stat">
               <span class="stat-label">Total Students</span>
               <span class="stat-value" data-stat="students">0</span>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-stat-card="teachers">
             <div class="stat">
               <span class="stat-label">Total Teachers</span>
               <span class="stat-value" data-stat="teachers">0</span>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-stat-card="streams">
             <div class="stat">
               <span class="stat-label">Streams</span>
               <span class="stat-value" data-stat="streams">0</span>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="cursor: pointer" data-stat-card="subjects">
+            <div class="stat">
+              <span class="stat-label">Subjects</span>
+              <span class="stat-value" data-stat="subjects">0</span>
+            </div>
+          </div>
+          <div class="card" style="cursor: pointer" data-stat-card="divisions">
             <div class="stat">
               <span class="stat-label">Divisions</span>
               <span class="stat-value" data-stat="divisions">0</span>
@@ -117,7 +122,7 @@
             </div>
             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap">
               <button class="btn secondary" data-download-template="students">
-                View Students
+                Export Students
               </button>
               <button class="btn secondary" data-download-template="teachers">
                 Export Teachers
@@ -128,6 +133,9 @@
                 style="background: #e74c3c; border-color: #e74c3c"
               >
                 Generate Defaulter List
+              </button>
+              <button class="btn secondary" data-view-admin-defaulter-history>
+                Defaulter History
               </button>
             </div>
           </div>
@@ -199,39 +207,6 @@
           </div>
         </section>
 
-        <section class="card" data-activity-section>
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              gap: 0.5rem;
-            "
-          >
-            <h3>Recent Activity</h3>
-            <div style="display: flex; gap: 0.5rem">
-              <button class="btn ghost" data-clear-activity>Clear</button>
-              <button class="btn ghost" data-refresh-activity>Refresh</button>
-            </div>
-          </div>
-          <div class="table-wrapper" style="margin-top: 1rem">
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Action</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody data-activity-body>
-                <tr>
-                  <td colspan="3">No activity yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         <!-- Teacher Information Section -->
         <section class="card" data-teachers-info-section>
           <div
@@ -253,7 +228,7 @@
           </div>
           <div
             class="table-wrapper"
-            style="margin-top: 1rem; max-height: 480px"
+            style="margin-top: 1rem; max-height: 70vh; overflow-y: auto"
           >
             <table>
               <thead>
@@ -433,6 +408,39 @@
             </table>
           </div>
         </section>
+
+        <section class="card" data-activity-section>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 0.5rem;
+            "
+          >
+            <h3>Recent Activity</h3>
+            <div style="display: flex; gap: 0.5rem">
+              <button class="btn ghost" data-clear-activity>Clear</button>
+              <button class="btn ghost" data-refresh-activity>Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrapper" style="margin-top: 1rem">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody data-activity-body>
+                <tr>
+                  <td colspan="3">No activity yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -479,7 +487,7 @@
                 <th>Stream</th>
                 <th>Division</th>
                 <th>Saved</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody data-history-body>
@@ -492,20 +500,73 @@
       </div>
     </dialog>
 
+    <!-- View Students in Session Modal -->
+    <dialog
+      data-view-session-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(700px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <div>
+            <h3>Session Students</h3>
+            <p class="tagline" data-session-details></p>
+          </div>
+          <button type="button" class="btn ghost" data-close-view-session>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 50vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Roll No</th>
+                <th>Student ID</th>
+                <th>Name</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody data-session-students-body>
+              <tr>
+                <td colspan="4">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <menu style="display: flex; gap: 0.75rem; justify-content: flex-end">
+          <button type="button" class="btn" data-export-session>
+            Export as .xlsx
+          </button>
+        </menu>
+      </div>
+    </dialog>
+
     <dialog
       data-export-students-modal
       style="
         border: none;
         border-radius: 16px;
         padding: 2rem;
-        width: min(600px, 90vw);
+        width: min(800px, 90vw);
+        max-height: 80vh;
       "
     >
       <form method="dialog" class="layout-grid" style="gap: 1rem">
-        <h3>View Students</h3>
+        <h3>Export Students</h3>
         <p class="tagline">
-          Select stream, division, and year to view students. You can export the
-          displayed data as CSV.
+          Select stream, division, and year to view students before exporting to
+          .xlsx
         </p>
         <div class="input-group">
           <label for="exportStream">Stream</label>
@@ -569,13 +630,66 @@
         </div>
         <button
           type="button"
-          class="btn ghost"
+          class="btn"
           style="margin-top: 1rem; display: none"
-          data-export-csv
+          data-export-students-xlsx
         >
-          Export as CSV
+          Export as .xlsx
         </button>
       </form>
+    </dialog>
+
+    <!-- Export Teachers Modal -->
+    <dialog
+      data-export-teachers-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(800px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <h3>View Teachers</h3>
+        <p class="tagline">View all teachers before exporting to .xlsx</p>
+        <div
+          class="table-wrapper"
+          style="margin-top: 1rem; max-height: 400px; overflow-y: auto"
+          data-teachers-view-table
+        >
+          <table>
+            <thead>
+              <tr>
+                <th>Teacher ID</th>
+                <th>Name</th>
+                <th>Subject</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Semester</th>
+                <th>Divisions</th>
+              </tr>
+            </thead>
+            <tbody data-teachers-view-body>
+              <tr>
+                <td colspan="7">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <menu style="display: flex; gap: 0.75rem; justify-content: flex-end">
+          <button
+            type="button"
+            class="btn secondary"
+            data-cancel-export-teachers
+          >
+            Cancel
+          </button>
+          <button type="button" class="btn" data-export-teachers-xlsx>
+            Export as .xlsx
+          </button>
+        </menu>
+      </div>
     </dialog>
 
     <dialog
@@ -824,11 +938,368 @@
                   border-color: #e74c3c;
                 "
               >
-                Generate List
+                View Defaulters
               </button>
             </div>
           </menu>
         </form>
+
+        <!-- Defaulters Preview -->
+        <div style="display: none" data-defaulters-preview>
+          <h4>Defaulters Preview</h4>
+          <p class="tagline" data-defaulters-summary></p>
+          <div
+            class="table-wrapper"
+            style="margin-top: 1rem; max-height: 400px; overflow-y: auto"
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Name</th>
+                  <th>Year</th>
+                  <th>Stream</th>
+                  <th>Division</th>
+                  <th>Attendance %</th>
+                </tr>
+              </thead>
+              <tbody data-defaulters-body>
+                <tr>
+                  <td colspan="6">No defaulters to display</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            class="btn"
+            style="margin-top: 1rem; background: #e74c3c; border-color: #e74c3c"
+            data-export-defaulters-xlsx
+          >
+            Export as .xlsx
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Students List Modal -->
+    <dialog
+      data-students-list-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(700px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>All Students</h3>
+          <button type="button" class="btn ghost" data-close-students-list>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Division</th>
+              </tr>
+            </thead>
+            <tbody data-students-list-body>
+              <tr>
+                <td colspan="4">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Teachers List Modal -->
+    <dialog
+      data-teachers-list-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(1100px, 95vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>All Teachers</h3>
+          <button type="button" class="btn ghost" data-close-teachers-list>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Teacher ID</th>
+                <th>Teacher Name</th>
+                <th>Subject</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Semester</th>
+                <th>Division</th>
+              </tr>
+            </thead>
+            <tbody data-teachers-list-body>
+              <tr>
+                <td colspan="7">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Streams List Modal -->
+    <dialog
+      data-streams-list-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(500px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>All Streams</h3>
+          <button type="button" class="btn ghost" data-close-streams-list>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Stream</th>
+                <th>Students</th>
+              </tr>
+            </thead>
+            <tbody data-streams-list-body>
+              <tr>
+                <td colspan="2">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Subjects List Modal -->
+    <dialog
+      data-subjects-list-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(800px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>All Subjects</h3>
+          <button type="button" class="btn ghost" data-close-subjects-list>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Year-Stream-Division</th>
+                <th>Taught by</th>
+              </tr>
+            </thead>
+            <tbody data-subjects-list-body>
+              <tr>
+                <td colspan="3">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Divisions List Modal -->
+    <dialog
+      data-divisions-list-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(600px, 90vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>All Divisions</h3>
+          <button type="button" class="btn ghost" data-close-divisions-list>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Division</th>
+                <th>Taught by</th>
+              </tr>
+            </thead>
+            <tbody data-divisions-list-body>
+              <tr>
+                <td colspan="2">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Admin Defaulter Lists History Modal -->
+    <dialog
+      data-admin-defaulter-history-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(1000px, 95vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>Defaulter Lists History</h3>
+          <button
+            type="button"
+            class="btn ghost"
+            data-close-admin-defaulter-history
+          >
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Teacher</th>
+                <th>Filters</th>
+                <th>Threshold</th>
+                <th>Defaulters</th>
+                <th>Saved On</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody data-admin-defaulter-history-body>
+              <tr>
+                <td colspan="6">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Admin Defaulter History Detail Modal -->
+    <dialog
+      data-admin-dh-detail-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(860px, 95vw);
+        max-height: 90vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          "
+        >
+          <div>
+            <h3>Defaulter List Detail</h3>
+            <p class="tagline" data-admin-dh-detail-summary>—</p>
+          </div>
+          <button type="button" class="btn ghost" data-close-admin-dh-detail>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 65vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Roll No</th>
+                <th>Student Name</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Division</th>
+                <th>Subject</th>
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody data-admin-dh-detail-body>
+              <tr>
+                <td colspan="8">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </dialog>
 

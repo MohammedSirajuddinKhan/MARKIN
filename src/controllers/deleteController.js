@@ -5,7 +5,7 @@ import pool from "../../config/db.js";
  * Removes a saved attendance session from the database
  * Only allows deletion of backups that belong to the logged-in teacher
  */
-export async function deleteAttendanceHistory(req, res, next) {
+export async function deleteAttendanceHistory(req, res, next) {O
   try {
     console.log("🗑️  DELETE ATTENDANCE HISTORY REQUEST");
     console.log("   Request body:", req.body);

@@ -78,6 +78,9 @@
             <button class="btn secondary" data-view-history>
               View History
             </button>
+            <button class="btn secondary" data-view-defaulter-history>
+              Defaulter History
+            </button>
             <button class="btn ghost" data-refresh>Refresh</button>
           </div>
         </header>
@@ -356,6 +359,108 @@
             <tbody data-history-body>
               <tr>
                 <td colspan="7">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Defaulter Lists History Modal -->
+    <dialog
+      data-defaulter-history-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(900px, 95vw);
+        max-height: 80vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <h3>Defaulter Lists History</h3>
+          <button type="button" class="btn ghost" data-close-defaulter-history>
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 60vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Filters</th>
+                <th>Threshold</th>
+                <th>Defaulters</th>
+                <th>Saved On</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody data-defaulter-history-body>
+              <tr>
+                <td colspan="5">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Defaulter History Detail Modal -->
+    <dialog
+      data-defaulter-history-detail-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(860px, 95vw);
+        max-height: 90vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          "
+        >
+          <div>
+            <h3>Defaulter List Detail</h3>
+            <p class="tagline" data-dh-detail-summary>—</p>
+          </div>
+          <button
+            type="button"
+            class="btn ghost"
+            data-close-defaulter-history-detail
+          >
+            Close
+          </button>
+        </div>
+        <div class="table-wrapper" style="max-height: 65vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Roll No</th>
+                <th>Student Name</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Division</th>
+                <th>Subject</th>
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody data-dh-detail-body>
+              <tr>
+                <td colspan="8">Loading...</td>
               </tr>
             </tbody>
           </table>
@@ -788,20 +893,95 @@
                 Next
               </button>
               <button
-                type="submit"
+                type="button"
+                class="btn ghost"
+                data-defaulter-view
+                style="display: none"
+              >
+                View
+              </button>
+              <button
+                type="button"
                 class="btn"
-                data-defaulter-generate
+                data-defaulter-export
                 style="
                   display: none;
                   background: #e74c3c;
                   border-color: #e74c3c;
                 "
               >
-                Generate List
+                Export
               </button>
             </div>
           </menu>
         </form>
+      </div>
+    </dialog>
+
+    <!-- Defaulter Results Modal -->
+    <dialog
+      data-defaulter-results-modal
+      style="
+        border: none;
+        border-radius: 16px;
+        padding: 2rem;
+        width: min(860px, 95vw);
+        max-height: 90vh;
+      "
+    >
+      <div class="layout-grid" style="gap: 1rem">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          "
+        >
+          <div>
+            <h3>Defaulter List</h3>
+            <p class="tagline" data-defaulter-results-summary>Loading...</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center">
+            <button
+              type="button"
+              class="btn"
+              data-defaulter-results-export
+              style="background: #e74c3c; border-color: #e74c3c"
+            >
+              Export
+            </button>
+            <button
+              type="button"
+              class="btn ghost"
+              data-close-defaulter-results
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <div class="table-wrapper" style="max-height: 62vh; overflow-y: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Roll No</th>
+                <th>Student Name</th>
+                <th>Year</th>
+                <th>Stream</th>
+                <th>Division</th>
+                <th>Subject</th>
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody data-defaulter-results-body>
+              <tr>
+                <td colspan="8">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </dialog>
 

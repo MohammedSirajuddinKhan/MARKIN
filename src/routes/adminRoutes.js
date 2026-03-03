@@ -26,6 +26,16 @@ import {
   getStudentDivisions,
   getTeacherStreams,
   getStudentStreams,
+  getSessionStudents,
+  deleteAttendanceSession,
+  getAllStudents,
+  getAllTeachers,
+  getAllSubjects,
+  getAllDivisions,
+  getStudentsByFilters,
+  getAdminDefaulterHistory,
+  viewAdminDefaulterHistoryEntry,
+  deleteAdminDefaulterHistoryEntry,
 } from "../controllers/adminController.js";
 import { requireAuth, requireRole } from "../middlewares/authMiddleware.js";
 import notificationService from "../services/notificationService.js";
@@ -59,6 +69,8 @@ router.get("/dashboard", fetchDashboardStats);
 router.get("/templates/:type", downloadTemplate);
 router.get("/attendance/history", getAttendanceHistory);
 router.get("/attendance/backup/:id", downloadAttendanceBackup);
+router.get("/attendance/session/:id", getSessionStudents);
+router.delete("/attendance/session/:id", deleteAttendanceSession);
 router.post("/delete-all-data", deleteAllData);
 router.post("/attendance/clear-history", clearAttendanceHistory);
 router.post("/auto-map-students", triggerAutoMapping);
@@ -66,15 +78,25 @@ router.post("/auto-map-students", triggerAutoMapping);
 // Defaulter management routes
 router.get("/defaulters", getDefaulterList);
 router.get("/defaulters/download", downloadDefaulterList);
+router.get("/defaulters/history", getAdminDefaulterHistory);
+router.get("/defaulters/history/:id", viewAdminDefaulterHistoryEntry);
+router.delete("/defaulters/history/:id", deleteAdminDefaulterHistoryEntry);
 
 // Teacher and Student information routes
 router.get("/teachers-info", getTeachersInfo);
+router.get("/students", getStudentsByFilters);
 router.get("/students-info", getStudentsInfo);
 router.get("/streams-divisions", getStreamsDivisions);
 router.get("/teacher-divisions", getTeacherDivisions);
 router.get("/student-divisions", getStudentDivisions);
 router.get("/teacher-streams", getTeacherStreams);
 router.get("/student-streams", getStudentStreams);
+
+// Analytics routes for clickable stat cards
+router.get("/all-students", getAllStudents);
+router.get("/all-teachers", getAllTeachers);
+router.get("/all-subjects", getAllSubjects);
+router.get("/all-divisions", getAllDivisions);
 
 // Real-time updates via Server-Sent Events
 router.get("/live-updates", (req, res) => {

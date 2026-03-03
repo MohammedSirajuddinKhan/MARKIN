@@ -222,6 +222,13 @@ export async function fetchDashboardStats(req, res, next) {
        ORDER BY division`,
     );
 
+    // Get distinct subjects from teacher records
+    const [subjectsList] = await pool.query(
+      `SELECT DISTINCT subject FROM teacher_details_db 
+       WHERE subject IS NOT NULL AND subject != ''
+       ORDER BY subject`,
+    );
+
     // Split comma-separated divisions and get unique values
     const uniqueDivisions = [
       ...new Set(
@@ -246,6 +253,7 @@ export async function fetchDashboardStats(req, res, next) {
       teachers: teacherCount?.[0]?.count || 0,
       streams: streamsList.map((s) => s.stream),
       divisions: uniqueDivisions,
+      subjects: subjectsList.map((s) => s.subject),
       streamDivisionCounts: streamDivisionCounts || [],
     };
 
@@ -777,12 +785,16 @@ export async function downloadDefaulterList(req, res, next) {
       threshold: parseFloat(threshold),
     });
 
-    // Save to history
-    await defaulterService.saveDefaulterHistory(
-      defaulters,
-      req.session.user.id,
-      "admin",
-    );
+    // Save to history (non-fatal — schema mismatch in old table won't block export)
+    try {
+      await defaulterService.saveDefaulterHistory(
+        defaulters,
+        req.session.user.id,
+        "admin",
+      );
+    } catch (histErr) {
+      console.warn("⚠️  defaulter_history save skipped:", histErr.message);
+    }
 
     // Notify about defaulter generation
     notificationService.notifyDefaulterGenerated({
@@ -850,21 +862,26 @@ export async function updateMonthlyAttendance(req, res, next) {
 export async function getTeachersInfo(req, res, next) {
   try {
     const query = `
-      SELECT 
+      SELECT DISTINCT
         t.teacher_id,
         t.name as teacher_name,
         t.subject,
         t.year,
         t.stream,
         t.semester,
-        t.division as divisions,
+        t.division,
         (
           SELECT COUNT(DISTINCT tsm.student_id)
           FROM teacher_student_map tsm
+          INNER JOIN student_details_db s 
+            ON tsm.student_id = s.student_id
           WHERE tsm.teacher_id = t.teacher_id
+            AND s.year = t.year
+            AND s.stream = t.stream
+            AND FIND_IN_SET(s.division, t.division) > 0
         ) as student_count
       FROM teacher_details_db t
-      ORDER BY t.name, t.year, t.stream, t.subject
+      ORDER BY t.name, t.year, t.stream, t.semester, t.subject
     `;
 
     const [teachers] = await pool.query(query);
@@ -1159,6 +1176,315 @@ export async function getStudentStreams(req, res, next) {
     });
   } catch (error) {
     console.error("Get student streams error:", error);
+    return next(error);
+  }
+}
+
+// Get session students for view in admin
+export async function getSessionStudents(req, res, next) {
+  try {
+    const sessionId = req.params.id;
+
+    const [backup] = await pool.query(
+      `SELECT filename, session_id, subject, year, semester, stream, division, started_at, records, teacher_id FROM attendance_backup WHERE id = ?`,
+      [sessionId],
+    );
+
+    if (!backup || !Array.isArray(backup) || backup.length === 0) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    const record = backup[0];
+
+    // Parse the records JSON to get student details
+    let students = [];
+    try {
+      students = JSON.parse(record.records || "[]");
+    } catch (err) {
+      console.error("Failed to parse records:", err);
+      return res.status(500).json({ message: "Invalid session data" });
+    }
+
+    return res.json({
+      session: {
+        id: sessionId,
+        filename: record.filename,
+        session_id: record.session_id,
+        subject: record.subject,
+        year: record.year,
+        semester: record.semester,
+        stream: record.stream,
+        division: record.division,
+        started_at: record.started_at,
+        teacher_id: record.teacher_id,
+      },
+      students,
+    });
+  } catch (error) {
+    console.error("Get session students error:", error);
+    return next(error);
+  }
+}
+
+// Delete attendance session
+export async function deleteAttendanceSession(req, res, next) {
+  try {
+    const sessionId = req.params.id;
+
+    const [result] = await pool.query(
+      `DELETE FROM attendance_backup WHERE id = ?`,
+      [sessionId],
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO activity_logs 
+        (actor_role, actor_id, action, details, created_at) 
+       VALUES ('admin', ?, 'DELETE_ATTENDANCE_SESSION', ?, NOW())`,
+      [
+        req.session.user.id,
+        JSON.stringify({
+          sessionId,
+          timestamp: new Date().toISOString(),
+        }),
+      ],
+    );
+
+    return res.json({
+      message: "Attendance session deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete attendance session error:", error);
+    return next(error);
+  }
+}
+
+// Get all students for clickable Total Students card
+export async function getAllStudents(req, res, next) {
+  try {
+    const [students] = await pool.query(
+      `SELECT student_id, student_name, year, stream, division
+       FROM student_details_db
+       ORDER BY year, stream, division, student_name`,
+    );
+
+    return res.json({
+      allStudents: students || [],
+      count: students?.length || 0,
+    });
+  } catch (error) {
+    console.error("Get all students error:", error);
+    return next(error);
+  }
+}
+
+// Get all teachers for clickable Total Teachers card
+export async function getAllTeachers(req, res, next) {
+  try {
+    // Return every individual assignment row so the modal shows all 10 rows
+    const query = `
+      SELECT 
+        teacher_id,
+        name AS teacher_name,
+        subject,
+        year,
+        stream,
+        semester,
+        division
+      FROM teacher_details_db
+      ORDER BY name, year, stream, semester, subject
+    `;
+
+    const [teachers] = await pool.query(query);
+
+    return res.json({
+      allTeachers: teachers || [],
+      count: teachers?.length || 0,
+    });
+  } catch (error) {
+    console.error("Get all teachers error:", error);
+    return next(error);
+  }
+}
+
+// Get all subjects for clickable Subjects card
+export async function getAllSubjects(req, res, next) {
+  try {
+    const query = `
+      SELECT 
+        subject,
+        year,
+        stream,
+        division,
+        name as teacher_name
+      FROM teacher_details_db
+      ORDER BY subject, year, stream, division
+    `;
+
+    const [subjects] = await pool.query(query);
+
+    return res.json({
+      allSubjects: subjects || [],
+      count: subjects?.length || 0,
+    });
+  } catch (error) {
+    console.error("Get all subjects error:", error);
+    return next(error);
+  }
+}
+
+// Get all divisions for clickable Divisions card
+export async function getAllDivisions(req, res, next) {
+  try {
+    const query = `
+      SELECT 
+        division,
+        GROUP_CONCAT(DISTINCT name ORDER BY name SEPARATOR ', ') as teachers
+      FROM teacher_details_db
+      WHERE division IS NOT NULL AND division != ''
+      GROUP BY division
+      ORDER BY division
+    `;
+
+    const [divisions] = await pool.query(query);
+
+    // Split comma-separated divisions and aggregate teachers
+    const divisionMap = new Map();
+
+    divisions.forEach((item) => {
+      const divs = item.division.split(",").map((d) => d.trim().toUpperCase());
+      divs.forEach((div) => {
+        if (!divisionMap.has(div)) {
+          divisionMap.set(div, new Set());
+        }
+        const teacherNames = item.teachers.split(",").map((t) => t.trim());
+        teacherNames.forEach((teacher) => divisionMap.get(div).add(teacher));
+      });
+    });
+
+    const result = Array.from(divisionMap.entries())
+      .map(([division, teachersSet]) => ({
+        division,
+        teachers: Array.from(teachersSet).join(", "),
+      }))
+      .sort((a, b) => a.division.localeCompare(b.division));
+
+    return res.json({
+      allDivisions: result,
+      count: result.length,
+    });
+  } catch (error) {
+    console.error("Get all divisions error:", error);
+    return next(error);
+  }
+}
+
+// Get students by filters (stream, division, year) for export preview
+export async function getStudentsByFilters(req, res, next) {
+  try {
+    const { stream, division, year } = req.query;
+
+    let query = `
+      SELECT 
+        student_id,
+        student_name as name,
+        roll_no,
+        year,
+        stream,
+        division
+      FROM student_details_db
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (stream && stream !== "ALL") {
+      query += ` AND stream = ?`;
+      params.push(stream);
+    }
+
+    if (division && division !== "ALL") {
+      query += ` AND division = ?`;
+      params.push(division);
+    }
+
+    if (year && year !== "ALL") {
+      query += ` AND year = ?`;
+      params.push(year);
+    }
+
+    query += ` ORDER BY year, stream, division, roll_no`;
+
+    const [students] = await pool.query(query, params);
+
+    return res.json({
+      students: students || [],
+      count: students?.length || 0,
+    });
+  } catch (error) {
+    console.error("Get students by filters error:", error);
+    return next(error);
+  }
+}
+
+// ── Admin: Defaulter History CRUD ─────────────────────────────────────────
+
+export async function getAdminDefaulterHistory(req, res, next) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, teacher_id, teacher_name, threshold, year, stream, division, month,
+              defaulter_count, filters_summary, created_at
+       FROM Defaulter_History_Lists
+       ORDER BY created_at DESC
+       LIMIT 200`,
+    );
+    return res.json({ history: rows || [] });
+  } catch (error) {
+    console.error("Admin get defaulter history error:", error);
+    return next(error);
+  }
+}
+
+export async function viewAdminDefaulterHistoryEntry(req, res, next) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query(
+      `SELECT * FROM Defaulter_History_Lists WHERE id = ?`,
+      [id],
+    );
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+    const record = rows[0];
+    let defaulters = [];
+    try {
+      defaulters = record.defaulters_json
+        ? JSON.parse(record.defaulters_json)
+        : [];
+    } catch (_) {}
+    return res.json({ record, defaulters });
+  } catch (error) {
+    console.error("Admin view defaulter history entry error:", error);
+    return next(error);
+  }
+}
+
+export async function deleteAdminDefaulterHistoryEntry(req, res, next) {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.query(
+      `DELETE FROM Defaulter_History_Lists WHERE id = ?`,
+      [id],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+    return res.json({ message: "Record deleted successfully" });
+  } catch (error) {
+    console.error("Admin delete defaulter history entry error:", error);
     return next(error);
   }
 }

@@ -1,4 +1,5 @@
 import pool from "../../config/db.js";
+import notificationService from "../services/notificationService.js";
 
 const ADMIN_USER = process.env.ADMIN_USER || "admin@markin";
 const ADMIN_PASS = process.env.ADMIN_PASSWORD || "admin123";
@@ -69,6 +70,13 @@ export async function login(req, res, next) {
 }
 
 export function logout(req, res) {
+  const userId = req.session?.user?.id;
+  
+  // Disconnect all SSE connections for this user
+  if (userId) {
+    notificationService.disconnectUser(userId);
+  }
+
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
     res.json({ message: "Logged out" });

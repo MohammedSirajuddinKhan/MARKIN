@@ -187,6 +187,9 @@ export async function getAllSessions(req, res, next) {
     const studentId = req.session.user.id;
 
     // Get all sessions the student has attended (both present and absent)
+    // Use a subquery to get one name per teacher_id, since teacher_details_db
+    // can have multiple rows per teacher (one per subject) after the schema migration.
+    // Joining directly would multiply attendance rows — one per teacher-subject row.
     const [sessions] = await pool.query(
       `SELECT 
          ar.session_date,
@@ -198,7 +201,11 @@ export async function getAllSessions(req, res, next) {
          t.name as teacher_name,
          ar.created_at
        FROM attendance_records ar
-       LEFT JOIN teacher_details_db t ON ar.teacher_id = t.teacher_id
+       LEFT JOIN (
+         SELECT teacher_id, MAX(name) AS name
+         FROM teacher_details_db
+         GROUP BY teacher_id
+       ) t ON ar.teacher_id = t.teacher_id
        WHERE ar.student_id = ?
        ORDER BY ar.session_date DESC, ar.created_at DESC`,
       [studentId],

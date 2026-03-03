@@ -18,6 +18,10 @@ import {
   teacherDownloadDefaulterList,
   getStreamsAndDivisions,
   getSubjectsForClass,
+  saveDefaulterHistory,
+  getDefaulterHistory,
+  viewDefaulterHistoryEntry,
+  deleteDefaulterHistoryEntry,
 } from "../controllers/teacherController.js";
 import {
   deleteAttendanceHistory,
@@ -48,6 +52,12 @@ router.post("/attendance/export-excel", exportAttendanceExcel);
 // Defaulter management routes
 router.get("/defaulters", teacherGetDefaulterList);
 router.get("/defaulters/download", teacherDownloadDefaulterList);
+
+// Defaulter history routes
+router.post("/defaulters/history", saveDefaulterHistory);
+router.get("/defaulters/history", getDefaulterHistory);
+router.get("/defaulters/history/:id", viewDefaulterHistoryEntry);
+router.delete("/defaulters/history/:id", deleteDefaulterHistoryEntry);
 
 // Real-time updates via Server-Sent Events
 router.get("/live-updates", (req, res) => {

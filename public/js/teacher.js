@@ -31,6 +31,32 @@ const historyModal = document.querySelector("[data-history-modal]");
 const historyBody = document.querySelector("[data-history-body]");
 const closeHistoryButton = document.querySelector("[data-close-history]");
 
+// Defaulter history
+const viewDefaulterHistoryButton = document.querySelector(
+  "[data-view-defaulter-history]",
+);
+const defaulterHistoryModal = document.querySelector(
+  "[data-defaulter-history-modal]",
+);
+const defaulterHistoryBody = document.querySelector(
+  "[data-defaulter-history-body]",
+);
+const closeDefaulterHistoryButton = document.querySelector(
+  "[data-close-defaulter-history]",
+);
+const defaulterHistoryDetailModal = document.querySelector(
+  "[data-defaulter-history-detail-modal]",
+);
+const defaulterHistoryDetailBody = document.querySelector(
+  "[data-dh-detail-body]",
+);
+const defaulterHistoryDetailSummary = document.querySelector(
+  "[data-dh-detail-summary]",
+);
+const closeDefaulterHistoryDetailButton = document.querySelector(
+  "[data-close-defaulter-history-detail]",
+);
+
 const previewModal = document.querySelector("[data-preview-modal]");
 const closePreviewButton = document.querySelector("[data-close-preview]");
 const previewStudentsBody = document.querySelector("[data-preview-students]");
@@ -1125,6 +1151,29 @@ function initControls() {
     }
   });
 
+  // ── Defaulter History button ────────────────────────────────────────────────
+  viewDefaulterHistoryButton?.addEventListener("click", async () => {
+    defaulterHistoryModal?.showModal();
+    await loadDefaulterHistory();
+  });
+
+  closeDefaulterHistoryButton?.addEventListener("click", () => {
+    defaulterHistoryModal?.close();
+  });
+
+  defaulterHistoryModal?.addEventListener("click", (e) => {
+    if (e.target === defaulterHistoryModal) defaulterHistoryModal.close();
+  });
+
+  closeDefaulterHistoryDetailButton?.addEventListener("click", () => {
+    defaulterHistoryDetailModal?.close();
+  });
+
+  defaulterHistoryDetailModal?.addEventListener("click", (e) => {
+    if (e.target === defaulterHistoryDetailModal)
+      defaulterHistoryDetailModal.close();
+  });
+
   closePreviewButton?.addEventListener("click", () => {
     if (previewModal) {
       previewModal.close();
@@ -1133,6 +1182,10 @@ function initControls() {
 
   signoutButton?.addEventListener("click", async (event) => {
     event.preventDefault();
+
+    // Close live updates connection before logout
+    cleanupLiveUpdates();
+
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
       window.location.href = "/";
@@ -1213,6 +1266,139 @@ async function loadAttendanceHistory() {
     historyBody.innerHTML =
       '<tr><td colspan="6">Failed to load history.</td></tr>';
     handleError(error, "Unable to load attendance history");
+  }
+}
+
+// ── Defaulter Lists History ───────────────────────────────────────────────────
+
+async function loadDefaulterHistory() {
+  if (!defaulterHistoryBody) return;
+
+  defaulterHistoryBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+
+  try {
+    const { history } = await apiFetch("/api/teacher/defaulters/history");
+
+    if (!history || !history.length) {
+      defaulterHistoryBody.innerHTML =
+        '<tr><td colspan="5">No defaulter history found. Lists are saved automatically when you View them.</td></tr>';
+      return;
+    }
+
+    const rows = history
+      .map(
+        (item) => `
+        <tr>
+          <td style="font-size:0.85rem">${item.filters_summary || "—"}</td>
+          <td style="text-align:center">${item.threshold}%</td>
+          <td style="text-align:center; color:#e74c3c; font-weight:600">${item.defaulter_count}</td>
+          <td style="font-size:0.85rem">${formatDateTime(item.created_at)}</td>
+          <td>
+            <div style="display:flex; gap:0.4rem">
+              <button class="btn ghost" data-dh-view="${item.id}"
+                style="padding:0.25rem 0.65rem; font-size:0.8rem">View</button>
+              <button class="btn ghost" data-dh-delete="${item.id}"
+                style="padding:0.25rem 0.65rem; font-size:0.8rem; color:#dc3545">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `,
+      )
+      .join("");
+
+    defaulterHistoryBody.innerHTML = rows;
+
+    // View buttons
+    defaulterHistoryBody.querySelectorAll("[data-dh-view]").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        openDefaulterHistoryDetail(btn.getAttribute("data-dh-view")),
+      );
+    });
+
+    // Delete buttons
+    defaulterHistoryBody.querySelectorAll("[data-dh-delete]").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        deleteDefaulterHistoryItem(btn.getAttribute("data-dh-delete")),
+      );
+    });
+  } catch (error) {
+    defaulterHistoryBody.innerHTML =
+      '<tr><td colspan="5">Failed to load defaulter history.</td></tr>';
+    handleError(error, "Unable to load defaulter history");
+  }
+}
+
+async function openDefaulterHistoryDetail(id) {
+  if (!defaulterHistoryDetailModal) return;
+
+  defaulterHistoryDetailModal.showModal();
+  defaulterHistoryDetailBody.innerHTML =
+    '<tr><td colspan="8">Loading...</td></tr>';
+  if (defaulterHistoryDetailSummary)
+    defaulterHistoryDetailSummary.textContent = "Loading...";
+
+  try {
+    const { record, defaulters } = await apiFetch(
+      `/api/teacher/defaulters/history/${id}`,
+    );
+
+    if (defaulterHistoryDetailSummary) {
+      defaulterHistoryDetailSummary.textContent = `${record.filters_summary || ""} — ${record.defaulter_count} defaulter${record.defaulter_count !== 1 ? "s" : ""} · saved ${formatDateTime(record.created_at)}`;
+    }
+
+    if (!defaulters || defaulters.length === 0) {
+      defaulterHistoryDetailBody.innerHTML =
+        '<tr><td colspan="8" style="text-align:center; color:#27ae60">✅ No defaulters were recorded in this list.</td></tr>';
+      return;
+    }
+
+    defaulterHistoryDetailBody.innerHTML = defaulters
+      .map(
+        (d, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${d.roll_no || "—"}</td>
+          <td><strong>${d.student_name || "—"}</strong></td>
+          <td>${d.year || d.year_value || "—"}</td>
+          <td>${d.stream || "—"}</td>
+          <td>${d.division || "—"}</td>
+          <td>${d.subject || "—"}</td>
+          <td style="color:#e74c3c; font-weight:600">${
+            d.attendance_percentage != null
+              ? parseFloat(d.attendance_percentage).toFixed(1) + "%"
+              : "—"
+          }</td>
+        </tr>
+      `,
+      )
+      .join("");
+  } catch (error) {
+    defaulterHistoryDetailBody.innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+  }
+}
+
+async function deleteDefaulterHistoryItem(id) {
+  const confirmed = confirm(
+    "Delete this defaulter history entry?\nThis action cannot be undone.",
+  );
+  if (!confirmed) return;
+
+  try {
+    await apiFetch(`/api/teacher/defaulters/history/${id}`, {
+      method: "DELETE",
+    });
+    showToast({
+      title: "Deleted",
+      message: "Defaulter history entry removed",
+      type: "success",
+    });
+    await loadDefaulterHistory();
+  } catch (error) {
+    showToast({
+      title: "Delete failed",
+      message: error.message,
+      type: "danger",
+    });
   }
 }
 
@@ -1354,8 +1540,9 @@ function initDefaulterButton() {
   );
   const defaulterNextButton = document.querySelector("[data-defaulter-next]");
   const defaulterPrevButton = document.querySelector("[data-defaulter-prev]");
-  const defaulterGenerateButton = document.querySelector(
-    "[data-defaulter-generate]",
+  const defaulterViewButton = document.querySelector("[data-defaulter-view]");
+  const defaulterExportButton = document.querySelector(
+    "[data-defaulter-export]",
   );
   const tabButtons = document.querySelectorAll("[data-defaulter-tab]");
   const tabContents = document.querySelectorAll("[data-tab-content]");
@@ -1370,44 +1557,43 @@ function initDefaulterButton() {
   if (!generateDefaultersButton) return;
 
   generateDefaultersButton.addEventListener("click", async () => {
-    // Populate streams and divisions
-    try {
-      const response = await fetch("/api/teacher/streams", {
-        credentials: "include",
-      });
+    // Populate year, stream, division with ONLY this teacher's assigned values
+    const yearSelect = document.getElementById("defaulterYear");
+    const streamSelect = document.getElementById("defaulterStream");
+    const divisionSelect = document.getElementById("defaulterDivision");
 
-      if (response.ok) {
-        const data = await response.json();
-        const streamSelect = document.getElementById("defaulterStream");
-        const divisionSelect = document.getElementById("defaulterDivision");
+    // ── Year ──────────────────────────────────────────────────────────────
+    yearSelect.innerHTML = '<option value="">Select year...</option>';
+    (availableYears.length ? availableYears : ["FY", "SY", "TY"]).forEach(
+      (yr) => {
+        const opt = document.createElement("option");
+        opt.value = yr;
+        opt.textContent = yr;
+        yearSelect.appendChild(opt);
+      },
+    );
+    if (availableYears.length === 1) yearSelect.value = availableYears[0];
 
-        // Populate streams
-        if (data.streams) {
-          streamSelect.innerHTML =
-            '<option value="">Select stream...</option><option value="ALL">All Streams</option>';
-          data.streams.forEach((stream) => {
-            const option = document.createElement("option");
-            option.value = stream;
-            option.textContent = stream;
-            streamSelect.appendChild(option);
-          });
-        }
+    // ── Stream ────────────────────────────────────────────────────────────
+    streamSelect.innerHTML = '<option value="">Select stream...</option>';
+    availableStreams.forEach((stream) => {
+      const opt = document.createElement("option");
+      opt.value = stream;
+      opt.textContent = stream;
+      streamSelect.appendChild(opt);
+    });
+    if (availableStreams.length === 1) streamSelect.value = availableStreams[0];
 
-        // Populate divisions
-        if (data.divisions) {
-          divisionSelect.innerHTML =
-            '<option value="">Select division...</option><option value="ALL">All Divisions</option>';
-          data.divisions.forEach((division) => {
-            const option = document.createElement("option");
-            option.value = division;
-            option.textContent = division;
-            divisionSelect.appendChild(option);
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load streams/divisions:", error);
-    }
+    // ── Division ──────────────────────────────────────────────────────────
+    divisionSelect.innerHTML = '<option value="">Select division...</option>';
+    availableDivisions.forEach((division) => {
+      const opt = document.createElement("option");
+      opt.value = division;
+      opt.textContent = division;
+      divisionSelect.appendChild(opt);
+    });
+    if (availableDivisions.length === 1)
+      divisionSelect.value = availableDivisions[0];
 
     // Reset to first tab
     currentTabIndex = 0;
@@ -1445,9 +1631,11 @@ function initDefaulterButton() {
     if (defaulterNextButton)
       defaulterNextButton.style.display =
         index < tabs.length - 1 ? "block" : "none";
-    if (defaulterGenerateButton)
-      defaulterGenerateButton.style.display =
-        index === tabs.length - 1 ? "block" : "none";
+    const isLast = index === tabs.length - 1;
+    if (defaulterViewButton)
+      defaulterViewButton.style.display = isLast ? "block" : "none";
+    if (defaulterExportButton)
+      defaulterExportButton.style.display = isLast ? "block" : "none";
   }
 
   // Tab button clicks
@@ -1487,10 +1675,8 @@ function initDefaulterButton() {
     defaulterForm?.reset();
   });
 
-  // Form submission
-  defaulterForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
+  // Helper: collect current form params
+  function buildDefaulterParams() {
     const formData = new FormData(defaulterForm);
     const year = formData.get("year");
     const stream = formData.get("stream");
@@ -1498,66 +1684,196 @@ function initDefaulterButton() {
     const month = formData.get("month");
     const threshold = formData.get("threshold");
 
-    // Build query parameters
-    const params = new URLSearchParams({
-      threshold: parseFloat(threshold),
-    });
-
+    const params = new URLSearchParams({ threshold: parseFloat(threshold) });
     if (month && month !== "ALL") params.append("month", month);
     if (year && year !== "ALL") params.append("year", year);
     if (stream && stream !== "ALL") params.append("stream", stream);
     if (division && division !== "ALL") params.append("division", division);
+    return { params, year, stream, division, month, threshold };
+  }
+
+  // ── VIEW button: fetch JSON and show results modal ──────────────────────
+  const defaulterResultsModal = document.querySelector(
+    "[data-defaulter-results-modal]",
+  );
+  const defaulterResultsBody = document.querySelector(
+    "[data-defaulter-results-body]",
+  );
+  const defaulterResultsSummary = document.querySelector(
+    "[data-defaulter-results-summary]",
+  );
+  const defaulterResultsExportBtn = document.querySelector(
+    "[data-defaulter-results-export]",
+  );
+  const closeDefaulterResults = document.querySelector(
+    "[data-close-defaulter-results]",
+  );
+
+  closeDefaulterResults?.addEventListener("click", () =>
+    defaulterResultsModal?.close(),
+  );
+  defaulterResultsModal?.addEventListener("click", (e) => {
+    if (e.target === defaulterResultsModal) defaulterResultsModal.close();
+  });
+
+  // Store last used params so Export button inside results modal can reuse them
+  let lastDefaulterParams = null;
+
+  defaulterViewButton?.addEventListener("click", async () => {
+    const { params, year, stream, division, month, threshold } =
+      buildDefaulterParams();
+    lastDefaulterParams = { params, year, stream, division, month, threshold };
+
+    defaulterModal?.close();
+    defaulterResultsBody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
+    if (defaulterResultsSummary)
+      defaulterResultsSummary.textContent = "Loading defaulter list...";
+    defaulterResultsModal?.showModal();
 
     try {
-      toggleLoading(defaulterGenerateButton, true);
-      defaulterModal?.close();
-
-      // Fetch the Excel file
       const response = await fetch(
-        `/api/teacher/defaulters/download?${params.toString()}`,
-        {
-          method: "GET",
-          credentials: "include",
-        },
+        `/api/teacher/defaulters?${params.toString()}`,
+        { credentials: "include" },
       );
 
       if (!response.ok) {
-        const error = await response
+        const err = await response
           .json()
-          .catch(() => ({ message: "Failed to generate defaulter list" }));
-        throw new Error(error.message);
+          .catch(() => ({ message: "Failed to fetch defaulter list" }));
+        throw new Error(err.message);
       }
 
-      // Download file
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+      const data = await response.json();
+      const defaulters = data.defaulters || [];
 
-      const monthName = month === "ALL" ? "All" : month || "All";
-      const yearName = year === "ALL" ? "All" : year || "All";
-      a.download = `Defaulter_List_${threshold}%_${monthName}_${yearName}.xlsx`;
+      if (defaulterResultsSummary) {
+        defaulterResultsSummary.textContent = `${defaulters.length} defaulter${defaulters.length !== 1 ? "s" : ""} below ${threshold}% attendance`;
+      }
 
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (defaulters.length === 0) {
+        defaulterResultsBody.innerHTML =
+          '<tr><td colspan="8" style="text-align:center; color: #27ae60">✅ No defaulters found — all students meet the threshold.</td></tr>';
+        return;
+      }
 
+      defaulterResultsBody.innerHTML = defaulters
+        .map(
+          (d, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${d.roll_no || "—"}</td>
+          <td><strong>${d.student_name || "—"}</strong></td>
+          <td>${d.year || d.year_value || "—"}</td>
+          <td>${d.stream || "—"}</td>
+          <td>${d.division || "—"}</td>
+          <td>${d.subject || "—"}</td>
+          <td style="color:#e74c3c; font-weight:600">${
+            d.attendance_percentage != null
+              ? parseFloat(d.attendance_percentage).toFixed(1) + "%"
+              : "—"
+          }</td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      // Auto-save this view to Defaulter History
+      try {
+        await fetch("/api/teacher/defaulters/history", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            threshold,
+            year: year || null,
+            stream: stream || null,
+            division: division || null,
+            month: month || null,
+            defaulters,
+          }),
+        });
+      } catch (_) {
+        // Non-fatal — history save failure should not break the view
+      }
+    } catch (error) {
+      defaulterResultsBody.innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+      showToast({
+        title: "Unable to load defaulter list",
+        message: error.message,
+        type: "danger",
+      });
+    }
+  });
+
+  // ── EXPORT button (in wizard) ──────────────────────────────────────────
+  async function downloadDefaulterExcel({ params, year, month, threshold }) {
+    const response = await fetch(
+      `/api/teacher/defaulters/download?${params.toString()}`,
+      { method: "GET", credentials: "include" },
+    );
+
+    if (!response.ok) {
+      const error = await response
+        .json()
+        .catch(() => ({ message: "Failed to generate defaulter list" }));
+      throw new Error(error.message);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const monthName = month === "ALL" ? "All" : month || "All";
+    const yearName = year === "ALL" ? "All" : year || "All";
+    a.download = `Defaulter_List_${threshold}%_${monthName}_${yearName}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
+  defaulterExportButton?.addEventListener("click", async () => {
+    const exportData = buildDefaulterParams();
+    try {
+      toggleLoading(defaulterExportButton, true);
+      defaulterModal?.close();
+      await downloadDefaulterExcel(exportData);
       showToast({
         title: "Success",
-        message: `Defaulter list generated with ${threshold}% threshold`,
+        message: `Defaulter list exported with ${exportData.threshold}% threshold`,
         type: "success",
       });
-
       defaulterForm?.reset();
     } catch (error) {
       showToast({
-        title: "Unable to generate defaulter list",
+        title: "Unable to export defaulter list",
         message: error.message,
         type: "danger",
       });
     } finally {
-      toggleLoading(defaulterGenerateButton, false);
+      toggleLoading(defaulterExportButton, false);
+    }
+  });
+
+  // ── EXPORT button inside the results modal ─────────────────────────────
+  defaulterResultsExportBtn?.addEventListener("click", async () => {
+    if (!lastDefaulterParams) return;
+    try {
+      toggleLoading(defaulterResultsExportBtn, true);
+      await downloadDefaulterExcel(lastDefaulterParams);
+      showToast({
+        title: "Exported",
+        message: "Defaulter list downloaded successfully",
+        type: "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "Export failed",
+        message: error.message,
+        type: "danger",
+      });
+    } finally {
+      toggleLoading(defaulterResultsExportBtn, false);
     }
   });
 
@@ -1571,10 +1887,18 @@ function initDefaulterButton() {
 }
 
 // Setup live updates with Server-Sent Events
-function setupLiveUpdates() {
-  const eventSource = new EventSource("/api/teacher/live-updates");
+let liveEventSource = null;
 
-  eventSource.addEventListener("attendance_marked", (event) => {
+function setupLiveUpdates() {
+  // Close existing connection if any
+  if (liveEventSource) {
+    liveEventSource.close();
+    liveEventSource = null;
+  }
+
+  liveEventSource = new EventSource("/api/teacher/live-updates");
+
+  liveEventSource.addEventListener("attendance_marked", (event) => {
     const data = JSON.parse(event.data);
     // Only show if it's from another teacher
     if (teacherData && data.teacherId !== teacherData.id) {
@@ -1588,7 +1912,7 @@ function setupLiveUpdates() {
     loadDashboard();
   });
 
-  eventSource.addEventListener("data_import", (event) => {
+  liveEventSource.addEventListener("data_import", (event) => {
     const data = JSON.parse(event.data);
     showToast({
       title: "Data Updated",
@@ -1598,7 +1922,7 @@ function setupLiveUpdates() {
     loadDashboard();
   });
 
-  eventSource.addEventListener("defaulter_generated", (event) => {
+  liveEventSource.addEventListener("defaulter_generated", (event) => {
     const data = JSON.parse(event.data);
     if (data.role === "teacher") {
       showToast({
@@ -1610,22 +1934,46 @@ function setupLiveUpdates() {
     loadActivity();
   });
 
-  eventSource.addEventListener("stats_update", (event) => {
+  liveEventSource.addEventListener("stats_update", (event) => {
     loadDashboard();
   });
 
-  eventSource.onerror = (error) => {
+  liveEventSource.onerror = (error) => {
     console.error("SSE connection error:", error);
-    eventSource.close();
+    if (liveEventSource) {
+      liveEventSource.close();
+      liveEventSource = null;
+    }
     // Retry connection after 5 seconds
     setTimeout(setupLiveUpdates, 5000);
   };
-
-  // Cleanup on page unload
-  window.addEventListener("beforeunload", () => {
-    eventSource.close();
-  });
 }
+
+// Cleanup live updates connection on page unload
+function cleanupLiveUpdates() {
+  if (liveEventSource) {
+    console.log("🔌 Closing SSE connection on page unload");
+    liveEventSource.close();
+    liveEventSource = null;
+  }
+}
+
+// Multiple event handlers to ensure cleanup
+window.addEventListener("beforeunload", cleanupLiveUpdates);
+window.addEventListener("pagehide", cleanupLiveUpdates);
+window.addEventListener("unload", cleanupLiveUpdates);
+
+// Close connection when page becomes hidden (tab switch, minimize, etc.)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    cleanupLiveUpdates();
+  } else {
+    // Reconnect when page becomes visible again
+    if (!liveEventSource) {
+      setupLiveUpdates();
+    }
+  }
+});
 
 function bootstrap() {
   renderActiveSession();

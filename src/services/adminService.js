@@ -117,17 +117,14 @@ export async function upsertTeachers(teachers, actorId) {
         teacher.division?.toString().trim() || "",
       ]);
 
+      // Uses composite unique key (teacher_id, subject, year, stream, semester, division)
+      // so each unique teaching assignment gets its own row
       const sql = `
         INSERT INTO teacher_details_db 
           (teacher_id, name, subject, year, stream, semester, division) 
         VALUES ${values}
         ON DUPLICATE KEY UPDATE 
-          name = VALUES(name),
-          subject = VALUES(subject),
-          year = VALUES(year),
-          stream = VALUES(stream),
-          semester = VALUES(semester),
-          division = VALUES(division)
+          name = VALUES(name)
       `;
 
       await connection.query(sql, params);
@@ -208,8 +205,8 @@ export async function autoMapStudentsToTeachers(actorId) {
     // Clear existing mappings
     await connection.query(`DELETE FROM teacher_student_map`);
 
-    // Auto-map students to teachers based on YEAR and STREAM
-    // Maps all students in a year+stream to all teachers teaching that year+stream
+    // Auto-map students to teachers based on YEAR, STREAM, and DIVISION
+    // Teacher division may be comma-separated (e.g. "A,B,C"), student division is a single letter
     const [result] = await connection.query(`
       INSERT INTO teacher_student_map (teacher_id, student_id)
       SELECT DISTINCT t.teacher_id, s.student_id
@@ -217,6 +214,7 @@ export async function autoMapStudentsToTeachers(actorId) {
       INNER JOIN student_details_db s 
         ON t.year = s.year 
         AND t.stream = s.stream
+        AND FIND_IN_SET(s.division, t.division) > 0
       ON DUPLICATE KEY UPDATE teacher_id = VALUES(teacher_id)
     `);
 

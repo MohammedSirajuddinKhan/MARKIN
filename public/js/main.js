@@ -1,7 +1,13 @@
+console.log("🟢 main.js module loaded!");
+
 const toastStack = document.querySelector("[data-toast-stack]");
+console.log("📌 Toast stack element:", toastStack);
 
 export function showToast({ title, message, type = "info" }) {
-  if (!toastStack) return;
+  if (!toastStack) {
+    console.warn("⚠️ Toast stack not found, cannot show toast:", { title, message });
+    return;
+  }
 
   const wrapper = document.createElement("div");
   wrapper.className = "toast";

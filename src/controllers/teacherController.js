@@ -1008,9 +1008,16 @@ export async function exportAttendanceExcel(req, res, next) {
 export async function teacherGetDefaulterList(req, res, next) {
   try {
     const teacherId = req.session.user.id;
-    const { month, year, type = "monthly", threshold = 75 } = req.query;
+    const {
+      month,
+      year,
+      stream: queryStream,
+      division,
+      type = "monthly",
+      threshold = 75,
+    } = req.query;
 
-    // Get teacher's details to filter by their stream/subject
+    // Get teacher's details to fall back to their assigned stream/subject
     const [teacher] = await pool.query(
       `SELECT stream, subject FROM teacher_details_db WHERE teacher_id = ?`,
       [teacherId],
@@ -1020,21 +1027,25 @@ export async function teacherGetDefaulterList(req, res, next) {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
-    const { stream, subject } = teacher[0];
+    const filterStream = queryStream || teacher[0].stream;
+    const filterSubject = teacher[0].subject;
 
     let defaulters;
     if (type === "overall") {
       defaulters = await defaulterService.getOverallDefaulters({
-        stream,
-        subject,
+        stream: filterStream,
+        division,
+        year,
+        subject: filterSubject,
         threshold: parseFloat(threshold),
       });
     } else {
       defaulters = await defaulterService.getDefaulterList({
         month: month ? parseInt(month) : undefined,
         year: year ? parseInt(year) : undefined,
-        stream,
-        subject,
+        stream: filterStream,
+        division,
+        subject: filterSubject,
         threshold: parseFloat(threshold),
       });
     }
@@ -1113,12 +1124,16 @@ export async function teacherDownloadDefaulterList(req, res, next) {
       threshold: parseFloat(threshold),
     });
 
-    // Save to history
-    await defaulterService.saveDefaulterHistory(
-      defaulters,
-      teacherId,
-      "teacher",
-    );
+    // Save to history (non-fatal — schema mismatch in old table won't block export)
+    try {
+      await defaulterService.saveDefaulterHistory(
+        defaulters,
+        teacherId,
+        "teacher",
+      );
+    } catch (histErr) {
+      console.warn("⚠️  defaulter_history save skipped:", histErr.message);
+    }
 
     // Log activity
     await buildActivityPayload("DOWNLOAD_DEFAULTER_LIST", teacherId, {
@@ -1143,6 +1158,127 @@ export async function teacherDownloadDefaulterList(req, res, next) {
 
     await workbook.xlsx.write(res);
     res.end();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+// ── Defaulter History ─────────────────────────────────────────────────────────
+
+export async function saveDefaulterHistory(req, res, next) {
+  try {
+    const teacherId = req.session.user.id;
+    const { threshold, year, stream, division, month, defaulters } = req.body;
+
+    if (!Array.isArray(defaulters)) {
+      return res.status(400).json({ message: "defaulters must be an array" });
+    }
+
+    // Get teacher name
+    const [teacherRows] = await pool.query(
+      `SELECT name FROM teacher_details_db WHERE teacher_id = ? LIMIT 1`,
+      [teacherId],
+    );
+    const teacherName = teacherRows?.[0]?.name || null;
+
+    // Build a human-readable filter summary
+    const parts = [];
+    if (year && year !== "ALL") parts.push(`Year: ${year}`);
+    if (stream && stream !== "ALL") parts.push(`Stream: ${stream}`);
+    if (division && division !== "ALL") parts.push(`Div: ${division}`);
+    if (month && month !== "ALL") parts.push(`Month: ${month}`);
+    parts.push(`Threshold: ${threshold}%`);
+    const filtersSummary = parts.join(" | ");
+
+    const [result] = await pool.query(
+      `INSERT INTO Defaulter_History_Lists
+         (teacher_id, teacher_name, threshold, year, stream, division, month,
+          defaulter_count, filters_summary, defaulters_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        teacherId,
+        teacherName,
+        parseFloat(threshold) || 75,
+        year || null,
+        stream || null,
+        division || null,
+        month ? parseInt(month) : null,
+        defaulters.length,
+        filtersSummary,
+        JSON.stringify(defaulters),
+      ],
+    );
+
+    return res.json({
+      id: result.insertId,
+      message: "Defaulter list saved to history",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getDefaulterHistory(req, res, next) {
+  try {
+    const teacherId = req.session.user.id;
+
+    const [rows] = await pool.query(
+      `SELECT id, threshold, year, stream, division, month,
+              defaulter_count, filters_summary, created_at
+       FROM Defaulter_History_Lists
+       WHERE teacher_id = ?
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [teacherId],
+    );
+
+    return res.json({ history: rows });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function viewDefaulterHistoryEntry(req, res, next) {
+  try {
+    const teacherId = req.session.user.id;
+    const { id } = req.params;
+
+    const [rows] = await pool.query(
+      `SELECT * FROM Defaulter_History_Lists WHERE id = ? AND teacher_id = ?`,
+      [id, teacherId],
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    const row = rows[0];
+    let defaulters = [];
+    try {
+      defaulters = JSON.parse(row.defaulters_json || "[]");
+    } catch (_) {}
+
+    return res.json({ record: row, defaulters });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function deleteDefaulterHistoryEntry(req, res, next) {
+  try {
+    const teacherId = req.session.user.id;
+    const { id } = req.params;
+
+    const [result] = await pool.query(
+      `DELETE FROM Defaulter_History_Lists WHERE id = ? AND teacher_id = ?`,
+      [id, teacherId],
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    return res.json({ message: "Defaulter history entry deleted" });
   } catch (error) {
     return next(error);
   }

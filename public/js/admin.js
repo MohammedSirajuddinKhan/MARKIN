@@ -1,6 +1,15 @@
 import { apiFetch, showToast, toggleLoading, formatDateTime } from "./main.js";
 
+console.log("🟢 admin.js module loaded successfully!");
+console.log("✅ Imports available:", {
+  apiFetch,
+  showToast,
+  toggleLoading,
+  formatDateTime,
+});
+
 window.addEventListener("DOMContentLoaded", () => {
+  console.log("🎯 DOMContentLoaded event fired!");
   // All DOM queries and event listeners go inside here
   const statElements = document.querySelectorAll("[data-stat]");
   const activityBody = document.querySelector("[data-activity-body]");
@@ -37,9 +46,11 @@ window.addEventListener("DOMContentLoaded", () => {
   // All function definitions must be inside DOMContentLoaded to access DOM elements
 
   async function loadStats() {
+    console.log("🚀 loadStats() called");
     try {
+      console.log("🔄 Fetching /api/admin/stats...");
       const data = await apiFetch("/api/admin/stats");
-      console.log("📊 Dashboard stats received from API:", data);
+      console.log("✅ Dashboard stats received from API:", data);
       console.log("📊 Student count from API:", data.students);
 
       statElements.forEach((stat) => {
@@ -50,11 +61,17 @@ window.addEventListener("DOMContentLoaded", () => {
         } else if (key === "divisions") {
           // Display count of unique divisions
           stat.textContent = `${data.divisions?.length || 0}`;
+        } else if (key === "subjects") {
+          // Display count of unique subjects
+          stat.textContent = `${data.subjects?.length || 0}`;
         } else {
           stat.textContent = data[key] ?? 0;
           console.log(`📊 Setting ${key} stat to:`, data[key] ?? 0);
         }
       });
+
+      // Store data globally for modal access
+      window.adminStatsData = data;
     } catch (error) {
       showToast({
         title: "Unable to load stats",
@@ -91,7 +108,9 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function loadActivity() {
+    console.log("🚀 loadActivity() called");
     try {
+      console.log("🔄 Fetching /api/admin/activity...");
       const { activity } = await apiFetch("/api/admin/activity");
       if (!activity.length) {
         activityBody.innerHTML =
@@ -304,33 +323,6 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  templateButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const type = button.dataset.downloadTemplate;
-      if (type === "students") {
-        // Show modal for students view
-        loadStreamsDivisions();
-        exportStudentsModal?.showModal();
-        // Reset table and export button
-        const studentsViewTable = exportStudentsModal?.querySelector(
-          "[data-students-view-table]",
-        );
-        const studentsViewBody = exportStudentsModal?.querySelector(
-          "[data-students-view-body]",
-        );
-        const exportCsvButton =
-          exportStudentsModal?.querySelector("[data-export-csv]");
-        if (studentsViewTable) studentsViewTable.style.display = "none";
-        if (exportCsvButton) exportCsvButton.style.display = "none";
-        if (studentsViewBody)
-          studentsViewBody.innerHTML =
-            '<tr><td colspan="6">Select filters and click View to see students.</td></tr>';
-      } else {
-        window.open(`/api/admin/templates/${type}`, "_blank");
-      }
-    });
-  });
-
   cancelExportButton?.addEventListener("click", () => {
     exportStudentsModal?.close();
   });
@@ -357,8 +349,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const studentsViewBody = exportStudentsModal?.querySelector(
       "[data-students-view-body]",
     );
-    const exportCsvButton =
-      exportStudentsModal?.querySelector("[data-export-csv]");
+    const exportXlsxButton = exportStudentsModal?.querySelector(
+      "[data-export-students-xlsx]",
+    );
 
     if (studentsViewBody)
       studentsViewBody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
@@ -372,7 +365,7 @@ window.addEventListener("DOMContentLoaded", () => {
             studentsViewBody.innerHTML =
               '<tr><td colspan="6">No students found for selected filters.</td></tr>';
           if (studentsViewTable) studentsViewTable.style.display = "block";
-          if (exportCsvButton) exportCsvButton.style.display = "none";
+          if (exportXlsxButton) exportXlsxButton.style.display = "none";
           return;
         }
         const rows = students
@@ -391,25 +384,29 @@ window.addEventListener("DOMContentLoaded", () => {
           .join("");
         if (studentsViewBody) studentsViewBody.innerHTML = rows;
         if (studentsViewTable) studentsViewTable.style.display = "block";
-        if (exportCsvButton) exportCsvButton.style.display = "inline-block";
-        // Store students for CSV export
-        exportStudentsModal.studentsData = students;
+        if (exportXlsxButton) exportXlsxButton.style.display = "inline-block";
+        // Store data for xlsx export
+        exportStudentsModal.studentsData = { students, stream, division, year };
       })
       .catch((error) => {
         if (studentsViewBody)
           studentsViewBody.innerHTML = `<tr><td colspan="6">Failed to load students: ${error.message}</td></tr>`;
         if (studentsViewTable) studentsViewTable.style.display = "block";
-        if (exportCsvButton) exportCsvButton.style.display = "none";
+        if (exportXlsxButton) exportXlsxButton.style.display = "none";
       });
   });
 
-  // Export as CSV logic
-  const exportCsvButton =
-    exportStudentsModal?.querySelector("[data-export-csv]");
-  if (exportCsvButton) {
-    exportCsvButton.addEventListener("click", () => {
-      const students = exportStudentsModal.studentsData;
-      if (!students || !students.length) {
+  // Remove the duplicate submit handler that immediately exports
+  // (the one that was at line 465 in the original file)
+
+  // Export as .xlsx logic for students
+  const exportStudentsXlsxButton = exportStudentsModal?.querySelector(
+    "[data-export-students-xlsx]",
+  );
+  if (exportStudentsXlsxButton) {
+    exportStudentsXlsxButton.addEventListener("click", () => {
+      const data = exportStudentsModal.studentsData;
+      if (!data || !data.students || !data.students.length) {
         showToast({
           title: "No data",
           message: "No students to export.",
@@ -417,77 +414,30 @@ window.addEventListener("DOMContentLoaded", () => {
         });
         return;
       }
-      // Convert to CSV
-      const columns = [
-        "roll_no",
-        "student_id",
-        "name",
-        "year",
-        "stream",
-        "division",
-      ];
-      const csvRows = [columns.join(",")].concat(
-        students.map((student) =>
-          columns
-            .map(
-              (col) =>
-                `"${(student[col] || "").toString().replace(/"/g, '""')}"`,
-            )
-            .join(","),
-        ),
+
+      const { stream, division, year } = data;
+
+      // Download with filters
+      window.open(
+        `/api/admin/templates/students?stream=${encodeURIComponent(stream)}&division=${encodeURIComponent(division)}&year=${encodeURIComponent(year)}`,
+        "_blank",
       );
-      const csvContent = csvRows.join("\r\n");
-      const blob = new Blob([csvContent], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "students_export.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      exportStudentsModal?.close();
+
+      const yearLabel = year === "ALL" ? "All Years" : year;
+      const streamLabel = stream === "ALL" ? "All Streams" : stream;
+      const divisionLabel = division === "ALL" ? "All Divisions" : division;
+
       showToast({
-        title: "Exported",
-        message: "CSV file has been downloaded.",
+        title: "Export started",
+        message: `Downloading students: ${yearLabel} - ${streamLabel} - ${divisionLabel}`,
         type: "success",
       });
     });
   }
 
-  exportStudentsForm?.addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    const stream = exportStreamSelect?.value;
-    const division = exportDivisionSelect?.value;
-    const year = exportYearSelect?.value;
-
-    if (!stream || !division || !year) {
-      showToast({
-        title: "Missing selection",
-        message: "Please select stream, division, and year",
-        type: "warning",
-      });
-      return;
-    }
-
-    // Build display message
-    const yearLabel = year === "ALL" ? "All Years" : year;
-    const streamLabel = stream === "ALL" ? "All Streams" : stream;
-    const divisionLabel = division === "ALL" ? "All Divisions" : division;
-
-    // Download with filters
-    window.open(
-      `/api/admin/templates/students?stream=${encodeURIComponent(stream)}&division=${encodeURIComponent(division)}&year=${encodeURIComponent(year)}`,
-      "_blank",
-    );
-    exportStudentsModal?.close();
-
-    showToast({
-      title: "Export started",
-      message: `Downloading students: ${yearLabel} - ${streamLabel} - ${divisionLabel}`,
-      type: "success",
-    });
-  });
+  // Remove the duplicate submit handler that immediately exports
+  // (the one that was at line 465 in the original file)
 
   const refreshDashboardButton = document.querySelector(
     "[data-refresh-dashboard]",
@@ -642,11 +592,14 @@ window.addEventListener("DOMContentLoaded", () => {
           <td>${item.division || "—"}</td>
           <td>${savedDate}</td>
           <td>
-            <a href="/api/admin/attendance/backup/${
-              item.id
-            }" class="btn ghost" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" download>
-              Download
-            </a>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn ghost" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" onclick="viewSessionStudents(${item.id})">
+                View
+              </button>
+              <button class="btn ghost" style="padding: 0.25rem 0.75rem; font-size: 0.85rem; color: #dc3545; border-color: #dc3545;" onclick="deleteAttendanceRecord(${item.id})">
+                Delete
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -668,6 +621,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const signoutLink = document.querySelector("[data-signout]");
   signoutLink?.addEventListener("click", async (event) => {
     event.preventDefault();
+
+    // Close live updates connection before logout
+    cleanupLiveUpdates();
+
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
       window.location.href = "/";
@@ -808,9 +765,14 @@ window.addEventListener("DOMContentLoaded", () => {
   defaulterCancelButton?.addEventListener("click", () => {
     defaulterModal?.close();
     defaulterForm?.reset();
+    defaulterForm.style.display = "block";
+    const defaultersPreview = document.querySelector(
+      "[data-defaulters-preview]",
+    );
+    if (defaultersPreview) defaultersPreview.style.display = "none";
   });
 
-  // Form submission
+  // Form submission - Show preview instead of immediate download
   defaulterForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
@@ -834,8 +796,98 @@ window.addEventListener("DOMContentLoaded", () => {
 
     try {
       toggleLoading(defaulterGenerateButton, true);
-      defaulterModal?.close();
 
+      // Fetch defaulters list for preview
+      const response = await apiFetch(
+        `/api/admin/defaulters?${params.toString()}`,
+      );
+
+      const { defaulters, count, threshold: usedThreshold } = response;
+
+      // Hide form, show preview
+      defaulterForm.style.display = "none";
+
+      const defaultersPreview = document.querySelector(
+        "[data-defaulters-preview]",
+      );
+      const defaultersSummary = document.querySelector(
+        "[data-defaulters-summary]",
+      );
+      const defaultersBody = document.querySelector("[data-defaulters-body]");
+
+      if (defaultersPreview) defaultersPreview.style.display = "block";
+
+      if (defaultersSummary) {
+        const yearLabel = year === "ALL" ? "All Years" : year || "All Years";
+        const streamLabel =
+          stream === "ALL" ? "All Streams" : stream || "All Streams";
+        const divisionLabel =
+          division === "ALL" ? "All Divisions" : division || "All Divisions";
+        const monthLabel =
+          month === "ALL" ? "All Months" : month || "All Months";
+
+        defaultersSummary.textContent = `${count} defaulters found (${usedThreshold}% threshold) - ${yearLabel}, ${streamLabel}, ${divisionLabel}, Month: ${monthLabel}`;
+      }
+
+      if (defaultersBody) {
+        if (!defaulters || defaulters.length === 0) {
+          defaultersBody.innerHTML =
+            '<tr><td colspan="6">No defaulters found with the selected criteria</td></tr>';
+        } else {
+          const rows = defaulters
+            .map(
+              (d) => `
+            <tr>
+              <td>${d.student_id || "—"}</td>
+              <td>${d.student_name || "—"}</td>
+              <td>${d.year || "—"}</td>
+              <td>${d.stream || "—"}</td>
+              <td>${d.division || "—"}</td>
+              <td style="color: #dc3545; font-weight: 600;">${parseFloat(d.attendance_percentage || 0).toFixed(2)}%</td>
+            </tr>
+          `,
+            )
+            .join("");
+          defaultersBody.innerHTML = rows;
+        }
+      }
+
+      // Store params for export
+      defaulterModal.defaulterParams = params;
+
+      showToast({
+        title: "Defaulters loaded",
+        message: `Found ${count} defaulters`,
+        type: count > 0 ? "info" : "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "Unable to generate defaulter list",
+        message: error.message,
+        type: "error",
+      });
+    } finally {
+      toggleLoading(defaulterGenerateButton, false);
+    }
+  });
+
+  // Export defaulters as .xlsx
+  const exportDefaultersXlsxButton = document.querySelector(
+    "[data-export-defaulters-xlsx]",
+  );
+  exportDefaultersXlsxButton?.addEventListener("click", async () => {
+    const params = defaulterModal.defaulterParams;
+
+    if (!params) {
+      showToast({
+        title: "No data",
+        message: "Please generate defaulters list first",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
       // Fetch the Excel file
       const response = await fetch(
         `/api/admin/defaulters/download?${params.toString()}`,
@@ -848,7 +900,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (!response.ok) {
         const error = await response
           .json()
-          .catch(() => ({ message: "Failed to generate defaulter list" }));
+          .catch(() => ({ message: "Failed to download defaulter list" }));
         throw new Error(error.message);
       }
 
@@ -858,9 +910,10 @@ window.addEventListener("DOMContentLoaded", () => {
       const a = document.createElement("a");
       a.href = url;
 
-      const monthName = month === "ALL" ? "All" : month || "All";
-      const yearName = year === "ALL" ? "All" : year || "All";
-      a.download = `Defaulter_List_${threshold}%_${monthName}_${yearName}.xlsx`;
+      const month = params.get("month") || "All";
+      const year = params.get("year") || "All";
+      const threshold = params.get("threshold") || "75";
+      a.download = `Defaulter_List_${threshold}%_${month}_${year}.xlsx`;
 
       document.body.appendChild(a);
       a.click();
@@ -868,20 +921,25 @@ window.addEventListener("DOMContentLoaded", () => {
       document.body.removeChild(a);
 
       showToast({
-        title: "Success",
-        message: `Defaulter list generated with ${threshold}% threshold`,
+        title: "Export successful",
+        message: `Defaulter list downloaded`,
         type: "success",
       });
 
+      // Close modal and reset
+      defaulterModal?.close();
       defaulterForm?.reset();
+      defaulterForm.style.display = "block";
+      const defaultersPreview = document.querySelector(
+        "[data-defaulters-preview]",
+      );
+      if (defaultersPreview) defaultersPreview.style.display = "none";
     } catch (error) {
       showToast({
-        title: "Unable to generate defaulter list",
+        title: "Export failed",
         message: error.message,
         type: "error",
       });
-    } finally {
-      toggleLoading(defaulterGenerateButton, false);
     }
   });
 
@@ -893,11 +951,187 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Setup live updates with Server-Sent Events
-  function setupLiveUpdates() {
-    const eventSource = new EventSource("/api/admin/live-updates");
+  // ── Admin Defaulter History ────────────────────────────────────────────────
+  const viewAdminDefaulterHistoryButton = document.querySelector(
+    "[data-view-admin-defaulter-history]",
+  );
+  const adminDefaulterHistoryModal = document.querySelector(
+    "[data-admin-defaulter-history-modal]",
+  );
+  const adminDefaulterHistoryBody = document.querySelector(
+    "[data-admin-defaulter-history-body]",
+  );
+  const closeAdminDefaulterHistoryButton = document.querySelector(
+    "[data-close-admin-defaulter-history]",
+  );
+  const adminDhDetailModal = document.querySelector(
+    "[data-admin-dh-detail-modal]",
+  );
+  const adminDhDetailBody = document.querySelector(
+    "[data-admin-dh-detail-body]",
+  );
+  const adminDhDetailSummary = document.querySelector(
+    "[data-admin-dh-detail-summary]",
+  );
+  const closeAdminDhDetailButton = document.querySelector(
+    "[data-close-admin-dh-detail]",
+  );
 
-    eventSource.addEventListener("attendance_marked", (event) => {
+  viewAdminDefaulterHistoryButton?.addEventListener("click", () => {
+    loadAdminDefaulterHistory();
+    adminDefaulterHistoryModal?.showModal();
+  });
+
+  closeAdminDefaulterHistoryButton?.addEventListener("click", () =>
+    adminDefaulterHistoryModal?.close(),
+  );
+  adminDefaulterHistoryModal?.addEventListener("click", (e) => {
+    if (e.target === adminDefaulterHistoryModal)
+      adminDefaulterHistoryModal.close();
+  });
+
+  closeAdminDhDetailButton?.addEventListener("click", () =>
+    adminDhDetailModal?.close(),
+  );
+  adminDhDetailModal?.addEventListener("click", (e) => {
+    if (e.target === adminDhDetailModal) adminDhDetailModal.close();
+  });
+
+  async function loadAdminDefaulterHistory() {
+    if (!adminDefaulterHistoryBody) return;
+    adminDefaulterHistoryBody.innerHTML =
+      '<tr><td colspan="6">Loading...</td></tr>';
+    try {
+      const { history } = await apiFetch("/api/admin/defaulters/history");
+
+      if (!history || history.length === 0) {
+        adminDefaulterHistoryBody.innerHTML =
+          '<tr><td colspan="6">No defaulter history found.</td></tr>';
+        return;
+      }
+
+      adminDefaulterHistoryBody.innerHTML = history
+        .map((item) => {
+          const date = new Date(item.created_at).toLocaleString();
+          const threshold = parseFloat(item.threshold || 75).toFixed(0);
+          return `
+          <tr>
+            <td>${item.teacher_name || item.teacher_id || "—"}</td>
+            <td style="font-size:0.85rem;">${item.filters_summary || "—"}</td>
+            <td>${threshold}%</td>
+            <td style="font-weight:600;">${item.defaulter_count ?? 0}</td>
+            <td style="font-size:0.85rem;">${date}</td>
+            <td>
+              <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <button class="btn ghost" style="padding:0.2rem 0.6rem;font-size:0.8rem;"
+                  onclick="openAdminDhDetail(${item.id})">View</button>
+                <button class="btn ghost" style="padding:0.2rem 0.6rem;font-size:0.8rem;color:#dc3545;border-color:#dc3545;"
+                  onclick="deleteAdminDhItem(${item.id})">Delete</button>
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("");
+    } catch (error) {
+      adminDefaulterHistoryBody.innerHTML =
+        '<tr><td colspan="6">Failed to load history.</td></tr>';
+      showToast({
+        title: "Unable to load defaulter history",
+        message: error.message,
+        type: "error",
+      });
+    }
+  }
+
+  window.openAdminDhDetail = async function (id) {
+    if (!adminDhDetailModal) return;
+    if (adminDhDetailBody)
+      adminDhDetailBody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
+    if (adminDhDetailSummary) adminDhDetailSummary.textContent = "Loading…";
+    adminDhDetailModal.showModal();
+
+    try {
+      const { record, defaulters } = await apiFetch(
+        `/api/admin/defaulters/history/${id}`,
+      );
+
+      const threshold = parseFloat(record.threshold || 75).toFixed(0);
+      const date = new Date(record.created_at).toLocaleString();
+      if (adminDhDetailSummary) {
+        adminDhDetailSummary.textContent = `${record.teacher_name || record.teacher_id} · ${record.filters_summary || ""} · ${threshold}% threshold · ${defaulters.length} defaulters · ${date}`;
+      }
+
+      if (!defaulters || defaulters.length === 0) {
+        if (adminDhDetailBody)
+          adminDhDetailBody.innerHTML =
+            '<tr><td colspan="8">No defaulters in this record.</td></tr>';
+        return;
+      }
+
+      if (adminDhDetailBody) {
+        adminDhDetailBody.innerHTML = defaulters
+          .map(
+            (d, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${d.roll_no || "—"}</td>
+            <td>${d.student_name || "—"}</td>
+            <td>${d.year || "—"}</td>
+            <td>${d.stream || "—"}</td>
+            <td>${d.division || "—"}</td>
+            <td>${d.subject || "—"}</td>
+            <td style="color:#dc3545;font-weight:600;">${parseFloat(d.attendance_percentage || 0).toFixed(2)}%</td>
+          </tr>`,
+          )
+          .join("");
+      }
+    } catch (error) {
+      if (adminDhDetailBody)
+        adminDhDetailBody.innerHTML =
+          '<tr><td colspan="8">Failed to load detail.</td></tr>';
+      showToast({
+        title: "Unable to load detail",
+        message: error.message,
+        type: "error",
+      });
+    }
+  };
+
+  window.deleteAdminDhItem = async function (id) {
+    if (!confirm("Delete this defaulter history entry? This cannot be undone."))
+      return;
+    try {
+      await apiFetch(`/api/admin/defaulters/history/${id}`, {
+        method: "DELETE",
+      });
+      showToast({
+        title: "Deleted",
+        message: "Defaulter history entry removed",
+        type: "success",
+      });
+      loadAdminDefaulterHistory();
+    } catch (error) {
+      showToast({
+        title: "Delete failed",
+        message: error.message,
+        type: "error",
+      });
+    }
+  };
+
+  // Setup live updates with Server-Sent Events
+  let liveEventSource = null;
+
+  function setupLiveUpdates() {
+    // Close existing connection if any
+    if (liveEventSource) {
+      liveEventSource.close();
+      liveEventSource = null;
+    }
+
+    liveEventSource = new EventSource("/api/admin/live-updates");
+
+    liveEventSource.addEventListener("attendance_marked", (event) => {
       const data = JSON.parse(event.data);
       showToast({
         title: "Attendance Marked",
@@ -909,7 +1143,7 @@ window.addEventListener("DOMContentLoaded", () => {
       loadActivity();
     });
 
-    eventSource.addEventListener("data_import", (event) => {
+    liveEventSource.addEventListener("data_import", (event) => {
       const data = JSON.parse(event.data);
       showToast({
         title: "Data Imported",
@@ -920,7 +1154,7 @@ window.addEventListener("DOMContentLoaded", () => {
       loadActivity();
     });
 
-    eventSource.addEventListener("defaulter_generated", (event) => {
+    liveEventSource.addEventListener("defaulter_generated", (event) => {
       const data = JSON.parse(event.data);
       showToast({
         title: "Defaulter List Generated",
@@ -930,22 +1164,46 @@ window.addEventListener("DOMContentLoaded", () => {
       loadActivity();
     });
 
-    eventSource.addEventListener("stats_update", (event) => {
+    liveEventSource.addEventListener("stats_update", (event) => {
       loadStats();
     });
 
-    eventSource.onerror = (error) => {
+    liveEventSource.onerror = (error) => {
       console.error("SSE connection error:", error);
-      eventSource.close();
+      if (liveEventSource) {
+        liveEventSource.close();
+        liveEventSource = null;
+      }
       // Retry connection after 5 seconds
       setTimeout(setupLiveUpdates, 5000);
     };
-
-    // Cleanup on page unload
-    window.addEventListener("beforeunload", () => {
-      eventSource.close();
-    });
   }
+
+  // Cleanup live updates connection on page unload
+  function cleanupLiveUpdates() {
+    if (liveEventSource) {
+      console.log("🔌 Closing SSE connection on page unload");
+      liveEventSource.close();
+      liveEventSource = null;
+    }
+  }
+
+  // Multiple event handlers to ensure cleanup
+  window.addEventListener("beforeunload", cleanupLiveUpdates);
+  window.addEventListener("pagehide", cleanupLiveUpdates);
+  window.addEventListener("unload", cleanupLiveUpdates);
+
+  // Close connection when page becomes hidden (tab switch, minimize, etc.)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      cleanupLiveUpdates();
+    } else {
+      // Reconnect when page becomes visible again
+      if (!liveEventSource) {
+        setupLiveUpdates();
+      }
+    }
+  });
 
   // Teacher Information Section
   const teachersInfoBody = document.querySelector("[data-teachers-info-body]");
@@ -977,7 +1235,7 @@ window.addEventListener("DOMContentLoaded", () => {
         <td>${teacher.year || "N/A"}</td>
         <td>${teacher.stream || "N/A"}</td>
         <td>${teacher.semester || "N/A"}</td>
-        <td>${teacher.divisions || "N/A"}</td>
+        <td>${teacher.division || "N/A"}</td>
         <td>${teacher.student_count || 0}</td>
       </tr>
     `,
@@ -1327,12 +1585,534 @@ window.addEventListener("DOMContentLoaded", () => {
 
   loadStudentsButton?.addEventListener("click", loadStudentsInfo);
 
+  // === Global functions for attendance history view/delete ===
+  window.viewSessionStudents = async function (sessionId) {
+    const viewSessionModal = document.querySelector(
+      "[data-view-session-modal]",
+    );
+    const sessionDetailsEl = document.querySelector("[data-session-details]");
+    const sessionStudentsBody = document.querySelector(
+      "[data-session-students-body]",
+    );
+
+    if (!viewSessionModal || !sessionStudentsBody) return;
+
+    try {
+      sessionStudentsBody.innerHTML =
+        '<tr><td colspan="4">Loading...</td></tr>';
+      viewSessionModal.showModal();
+
+      const response = await apiFetch(
+        `/api/admin/attendance/session/${sessionId}`,
+      );
+      const { session, students } = response;
+
+      // Update session details
+      if (sessionDetailsEl) {
+        sessionDetailsEl.textContent = `${session.subject} - ${session.year} ${session.stream} ${session.division} (${session.teacher_id})`;
+      }
+
+      // Render students
+      if (!students || students.length === 0) {
+        sessionStudentsBody.innerHTML =
+          '<tr><td colspan="4">No students found</td></tr>';
+        return;
+      }
+
+      const rows = students
+        .map(
+          (s) => `
+        <tr>
+          <td>${s.rollNo || "—"}</td>
+          <td>${s.studentId || "—"}</td>
+          <td>${s.name || "—"}</td>
+          <td style="color: ${s.status === "P" ? "#28a745" : "#dc3545"}; font-weight: 600;">
+            ${s.status === "P" ? "Present" : "Absent"}
+          </td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      sessionStudentsBody.innerHTML = rows;
+
+      // Store data for export
+      viewSessionModal.sessionData = { session, students };
+    } catch (error) {
+      sessionStudentsBody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
+      showToast({
+        title: "Failed to load session",
+        message: error.message,
+        type: "error",
+      });
+    }
+  };
+
+  window.deleteAttendanceRecord = async function (sessionId) {
+    if (
+      !confirm(
+        "Are you sure you want to delete this attendance record? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/admin/attendance/session/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      showToast({
+        title: "Record deleted",
+        message: "Attendance record has been deleted successfully",
+        type: "success",
+      });
+
+      // Reload history
+      await loadAttendanceHistory();
+    } catch (error) {
+      showToast({
+        title: "Delete failed",
+        message: error.message,
+        type: "error",
+      });
+    }
+  };
+
+  // === Close view session modal ===
+  const closeViewSessionButton = document.querySelector(
+    "[data-close-view-session]",
+  );
+  closeViewSessionButton?.addEventListener("click", () => {
+    const viewSessionModal = document.querySelector(
+      "[data-view-session-modal]",
+    );
+    viewSessionModal?.close();
+  });
+
+  // === Export session as xlsx ===
+  const exportSessionButton = document.querySelector("[data-export-session]");
+  exportSessionButton?.addEventListener("click", async () => {
+    const viewSessionModal = document.querySelector(
+      "[data-view-session-modal]",
+    );
+    const sessionData = viewSessionModal?.sessionData;
+
+    if (!sessionData) {
+      showToast({
+        title: "No data",
+        message: "No session data to export",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      // Download the Excel file from backend
+      const sessionId = sessionData.session.id;
+      window.open(`/api/admin/attendance/backup/${sessionId}`, "_blank");
+
+      showToast({
+        title: "Export started",
+        message: "Downloading attendance report",
+        type: "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "Export failed",
+        message: error.message,
+        type: "error",
+      });
+    }
+  });
+
+  // === Clickable stat cards ===
+  const statCards = document.querySelectorAll("[data-stat-card]");
+  statCards.forEach((card) => {
+    card.addEventListener("click", async () => {
+      const statType = card.dataset.statCard;
+
+      if (statType === "students") {
+        await showStudentsList();
+      } else if (statType === "teachers") {
+        await showTeachersList();
+      } else if (statType === "streams") {
+        await showStreamsList();
+      } else if (statType === "subjects") {
+        await showSubjectsList();
+      } else if (statType === "divisions") {
+        await showDivisionsList();
+      }
+    });
+  });
+
+  async function showStudentsList() {
+    const modal = document.querySelector("[data-students-list-modal]");
+    const tbody = document.querySelector("[data-students-list-body]");
+
+    if (!modal || !tbody) return;
+
+    modal.showModal();
+    tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+
+    try {
+      const { allStudents } = await apiFetch("/api/admin/all-students");
+
+      if (!allStudents || allStudents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">No students found</td></tr>';
+        return;
+      }
+
+      const rows = allStudents
+        .map(
+          (s) => `
+        <tr>
+          <td>${s.student_name || "—"}</td>
+          <td>${s.year || "—"}</td>
+          <td>${s.stream || "—"}</td>
+          <td>${s.division || "—"}</td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      tbody.innerHTML = rows;
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
+    }
+  }
+
+  async function showTeachersList() {
+    const modal = document.querySelector("[data-teachers-list-modal]");
+    const tbody = document.querySelector("[data-teachers-list-body]");
+
+    if (!modal || !tbody) return;
+
+    modal.showModal();
+    tbody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
+
+    try {
+      const { allTeachers } = await apiFetch("/api/admin/all-teachers");
+
+      if (!allTeachers || allTeachers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7">No teachers found</td></tr>';
+        return;
+      }
+
+      // Each row = one unique teaching assignment (10 rows for 10 CSV entries)
+      const rows = allTeachers
+        .map(
+          (t) => `
+        <tr>
+          <td>${t.teacher_id || "—"}</td>
+          <td><strong>${t.teacher_name || "—"}</strong></td>
+          <td>${t.subject || "—"}</td>
+          <td>${t.year || "—"}</td>
+          <td>${t.stream || "—"}</td>
+          <td>${t.semester || "—"}</td>
+          <td>${t.division || "—"}</td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      tbody.innerHTML = rows;
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
+    }
+  }
+
+  async function showStreamsList() {
+    const modal = document.querySelector("[data-streams-list-modal]");
+    const tbody = document.querySelector("[data-streams-list-body]");
+
+    if (!modal || !tbody) return;
+
+    modal.showModal();
+    tbody.innerHTML = '<tr><td colspan="2">Loading...</td></tr>';
+
+    try {
+      // Fetch stream summary from students (shows real student streams)
+      const { allStudents } = await apiFetch("/api/admin/all-students");
+
+      if (!allStudents || allStudents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2">No streams found</td></tr>';
+        return;
+      }
+
+      // Count students per stream
+      const streamMap = {};
+      allStudents.forEach((s) => {
+        const key = s.stream || "Unknown";
+        streamMap[key] = (streamMap[key] || 0) + 1;
+      });
+
+      const rows = Object.entries(streamMap)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(
+          ([stream, count]) => `
+          <tr>
+            <td><strong>${stream}</strong></td>
+            <td>${count} student${count !== 1 ? "s" : ""}</td>
+          </tr>
+        `,
+        )
+        .join("");
+
+      tbody.innerHTML = rows;
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="2">Error: ${error.message}</td></tr>`;
+    }
+  }
+
+  async function showSubjectsList() {
+    const modal = document.querySelector("[data-subjects-list-modal]");
+    const tbody = document.querySelector("[data-subjects-list-body]");
+
+    if (!modal || !tbody) return;
+
+    modal.showModal();
+    tbody.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+
+    try {
+      const { allSubjects } = await apiFetch("/api/admin/all-subjects");
+
+      if (!allSubjects || allSubjects.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">No subjects found</td></tr>';
+        return;
+      }
+
+      const rows = allSubjects
+        .map(
+          (s) => `
+        <tr>
+          <td>${s.subject || "—"}</td>
+          <td>${s.year}-${s.stream}-${s.division || "—"}</td>
+          <td>${s.teacher_name || "—"}</td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      tbody.innerHTML = rows;
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="3">Error: ${error.message}</td></tr>`;
+    }
+  }
+
+  async function showDivisionsList() {
+    const modal = document.querySelector("[data-divisions-list-modal]");
+    const tbody = document.querySelector("[data-divisions-list-body]");
+
+    if (!modal || !tbody) return;
+
+    modal.showModal();
+    tbody.innerHTML = '<tr><td colspan="2">Loading...</td></tr>';
+
+    try {
+      const { allDivisions } = await apiFetch("/api/admin/all-divisions");
+
+      if (!allDivisions || allDivisions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2">No divisions found</td></tr>';
+        return;
+      }
+
+      const rows = allDivisions
+        .map(
+          (d) => `
+        <tr>
+          <td>${d.division || "—"}</td>
+          <td>${d.teachers || "—"}</td>
+        </tr>
+      `,
+        )
+        .join("");
+
+      tbody.innerHTML = rows;
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="2">Error: ${error.message}</td></tr>`;
+    }
+  }
+
+  // Close modal buttons
+  document
+    .querySelector("[data-close-students-list]")
+    ?.addEventListener("click", () => {
+      document.querySelector("[data-students-list-modal]")?.close();
+    });
+
+  document
+    .querySelector("[data-close-teachers-list]")
+    ?.addEventListener("click", () => {
+      document.querySelector("[data-teachers-list-modal]")?.close();
+    });
+
+  document
+    .querySelector("[data-close-streams-list]")
+    ?.addEventListener("click", () => {
+      document.querySelector("[data-streams-list-modal]")?.close();
+    });
+
+  document
+    .querySelector("[data-close-subjects-list]")
+    ?.addEventListener("click", () => {
+      document.querySelector("[data-subjects-list-modal]")?.close();
+    });
+
+  document
+    .querySelector("[data-close-divisions-list]")
+    ?.addEventListener("click", () => {
+      document.querySelector("[data-divisions-list-modal]")?.close();
+    });
+
+  // === Export Teachers functionality ===
+  const exportTeachersModal = document.querySelector(
+    "[data-export-teachers-modal]",
+  );
+  const exportTeachersButton = document.querySelector(
+    "[data-export-teachers-xlsx]",
+  );
+  const cancelExportTeachersButton = document.querySelector(
+    "[data-cancel-export-teachers]",
+  );
+
+  // Update template buttons to handle teachers differently
+  templateButtons.forEach((button) => {
+    const existingHandler = button.onclick;
+    button.onclick = null;
+
+    button.addEventListener("click", async () => {
+      const type = button.dataset.downloadTemplate;
+      if (type === "students") {
+        // Show modal for students view
+        loadStreamsDivisions();
+        exportStudentsModal?.showModal();
+        // Reset table and export button
+        const studentsViewTable = exportStudentsModal?.querySelector(
+          "[data-students-view-table]",
+        );
+        const studentsViewBody = exportStudentsModal?.querySelector(
+          "[data-students-view-body]",
+        );
+        const exportXlsxButton = exportStudentsModal?.querySelector(
+          "[data-export-students-xlsx]",
+        );
+        if (studentsViewTable) studentsViewTable.style.display = "none";
+        if (exportXlsxButton) exportXlsxButton.style.display = "none";
+        if (studentsViewBody)
+          studentsViewBody.innerHTML =
+            '<tr><td colspan="6">Select filters and click View to see students.</td></tr>';
+      } else if (type === "teachers") {
+        // Show teachers modal with preview
+        const teachersViewBody = exportTeachersModal?.querySelector(
+          "[data-teachers-view-body]",
+        );
+
+        if (teachersViewBody) {
+          teachersViewBody.innerHTML =
+            '<tr><td colspan="7">Loading...</td></tr>';
+        }
+
+        exportTeachersModal?.showModal();
+
+        try {
+          const { teachers } = await apiFetch("/api/admin/teachers-info");
+
+          if (!teachers || teachers.length === 0) {
+            teachersViewBody.innerHTML =
+              '<tr><td colspan="7">No teachers found</td></tr>';
+            return;
+          }
+
+          const rows = teachers
+            .map(
+              (t) => `
+            <tr>
+              <td>${t.teacher_id || "—"}</td>
+              <td>${t.teacher_name || "—"}</td>
+              <td>${t.subject || "—"}</td>
+              <td>${t.year || "—"}</td>
+              <td>${t.stream || "—"}</td>
+              <td>${t.semester || "—"}</td>
+              <td>${t.division || "—"}</td>
+            </tr>
+          `,
+            )
+            .join("");
+
+          teachersViewBody.innerHTML = rows;
+        } catch (error) {
+          teachersViewBody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
+        }
+      } else {
+        window.open(`/api/admin/templates/${type}`, "_blank");
+      }
+    });
+  });
+
+  cancelExportTeachersButton?.addEventListener("click", () => {
+    exportTeachersModal?.close();
+  });
+
+  exportTeachersButton?.addEventListener("click", () => {
+    window.open("/api/admin/templates/teachers", "_blank");
+    exportTeachersModal?.close();
+
+    showToast({
+      title: "Export started",
+      message: "Downloading teachers list",
+      type: "success",
+    });
+  });
+
   // Initialize everything after all functions are defined
-  updateSteps();
-  setupUploads();
-  loadStats();
-  loadActivity();
-  setupLiveUpdates();
-  loadTeachersInfo();
-  setupStudentFilters();
-}); // End of DOMContentLoaded
+  console.log("🎬 Starting initialization...");
+  try {
+    console.log("📝 Running updateSteps()");
+    updateSteps();
+    console.log("📂 Running setupUploads()");
+    setupUploads();
+
+    console.log("📊 Starting async initializations...");
+    // Run async initializations independently to prevent blocking
+    loadStats().catch((err) => {
+      console.error("❌ loadStats failed:", err);
+      showToast({
+        title: "Stats Loading Error",
+        message: err.message,
+        type: "error",
+      });
+    });
+
+    loadActivity().catch((err) => {
+      console.error("❌ loadActivity failed:", err);
+      showToast({
+        title: "Activity Loading Error",
+        message: err.message,
+        type: "error",
+      });
+    });
+
+    loadTeachersInfo().catch((err) => {
+      console.error("❌ loadTeachersInfo failed:", err);
+      showToast({
+        title: "Teachers Info Loading Error",
+        message: err.message,
+        type: "error",
+      });
+    });
+
+    setupLiveUpdates();
+
+    console.log("🔧 Running setupStudentFilters()");
+    try {
+      setupStudentFilters();
+    } catch (err) {
+      console.error("❌ setupStudentFilters failed:", err);
+    }
+
+    console.log("✅ Initialization complete!");
+  } catch (error) {
+    console.error("💥 Initialization error:", error);
+  }
+});

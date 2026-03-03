@@ -77,21 +77,21 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
   background: var(--color-surface-alt);
   border-radius: 8px;
   border: 1px solid var(--color-border);
 }
 
 .calendar-nav-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.35rem 0.75rem;
   background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
   transition: all 0.2s ease;
 }
@@ -108,7 +108,7 @@ button {
 }
 
 .calendar-month-display {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-text);
   display: flex;
@@ -117,11 +117,11 @@ button {
 }
 
 .calendar-year-selector {
-  padding: 0.3rem 0.6rem;
+  padding: 0.2rem 0.5rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   cursor: pointer;
   color: var(--color-text);
   font-weight: 500;
@@ -133,30 +133,30 @@ button {
 
 .calendar-container {
   width: 100%;
-  max-width: 800px;
+  max-width: min(480px, 100%);
   margin: 0 auto;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-top: 0.5rem;
+  gap: 3px;
+  margin-top: 0.25rem;
 }
 
 .calendar-weekday-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-bottom: 0.5rem;
+  gap: 3px;
+  margin-bottom: 0.35rem;
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: var(--color-muted);
   text-align: center;
 }
 
 .calendar-weekday {
-  padding: 0.3rem;
+  padding: 0.2rem;
   text-transform: uppercase;
 }
 
@@ -170,9 +170,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 500;
-  min-height: 35px;
+  min-height: 20px;
+  max-height: 52px;
 }
 
 .calendar-day.empty {
