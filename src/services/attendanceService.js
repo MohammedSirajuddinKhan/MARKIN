@@ -8,45 +8,26 @@ export async function getMappedStudents(teacherId, filters = {}) {
   const conditions = ["m.teacher_id = ?"];
   const params = [teacherId];
 
-  // If filters are provided, add additional conditions and join with teacher_details_db
-  if (filters.subject || filters.year || filters.semester || filters.stream || filters.division) {
-    query += ` INNER JOIN teacher_details_db t ON m.teacher_id = t.teacher_id`;
-
-    if (filters.subject) {
-      conditions.push("t.subject = ?");
-      params.push(filters.subject);
-    }
-    if (filters.year) {
-      conditions.push("t.year = ?");
-      params.push(filters.year);
-    }
-    if (filters.semester) {
-      conditions.push("t.semester = ?");
-      params.push(filters.semester);
-    }
-    if (filters.stream) {
-      conditions.push("t.stream = ?");
-      params.push(filters.stream);
-    }
-    if (filters.division) {
-      // Handle comma-separated divisions in teacher_details_db
-      conditions.push("FIND_IN_SET(?, t.division) > 0");
-      params.push(filters.division);
-    }
-
-    // Also match student attributes
-    if (filters.year) {
-      conditions.push("s.year = ?");
-      params.push(filters.year);
-    }
-    if (filters.stream) {
-      conditions.push("s.stream = ?");
-      params.push(filters.stream);
-    }
-    if (filters.division) {
-      conditions.push("s.division = ?");
-      params.push(filters.division);
-    }
+  // With the new schema, we can filter directly on teacher_student_map
+  if (filters.subject) {
+    conditions.push("m.subject = ?");
+    params.push(filters.subject);
+  }
+  if (filters.year) {
+    conditions.push("m.year = ?");
+    params.push(filters.year);
+  }
+  if (filters.semester) {
+    conditions.push("m.semester = ?");
+    params.push(filters.semester);
+  }
+  if (filters.stream) {
+    conditions.push("m.stream = ?");
+    params.push(filters.stream);
+  }
+  if (filters.division) {
+    conditions.push("s.division = ?");
+    params.push(filters.division);
   }
 
   query += ` WHERE ` + conditions.join(" AND ");

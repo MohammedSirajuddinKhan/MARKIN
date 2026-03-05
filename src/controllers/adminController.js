@@ -141,8 +141,10 @@ export async function confirmImport(req, res, next) {
       );
     }
 
+    // Manual mappings are skipped - autoMapStudentsToTeachers handles all mappings correctly
+    // based on year, stream, and division to prevent cross-year mapping issues
     if (Array.isArray(mappings) && mappings.length) {
-      results.mappings = await upsertMappings(mappings, req.session.user.id);
+      console.log(`Skipping ${mappings.length} manual mappings - will be handled by auto-mapping`);
     }
 
     // Automatically map students to teachers based on year and stream
@@ -907,12 +909,11 @@ export async function getTeachersInfo(req, res, next) {
         (
           SELECT COUNT(DISTINCT tsm.student_id)
           FROM teacher_student_map tsm
-          INNER JOIN student_details_db s 
-            ON tsm.student_id = s.student_id
           WHERE tsm.teacher_id = t.teacher_id
-            AND s.year = t.year
-            AND s.stream = t.stream
-            AND FIND_IN_SET(s.division, t.division) > 0
+            AND tsm.subject = t.subject
+            AND tsm.year = t.year
+            AND tsm.stream = t.stream
+            AND tsm.semester = t.semester
         ) as student_count
       FROM teacher_details_db t
       ORDER BY t.name, t.year, t.stream, t.semester, t.subject

@@ -207,15 +207,16 @@ export async function autoMapStudentsToTeachers(actorId) {
 
     // Auto-map students to teachers based on YEAR, STREAM, and DIVISION
     // Teacher division may be comma-separated (e.g. "A,B,C"), student division is a single letter
+    // Now includes subject, year, stream, semester to prevent cross-year mappings
     const [result] = await connection.query(`
-      INSERT INTO teacher_student_map (teacher_id, student_id)
-      SELECT DISTINCT t.teacher_id, s.student_id
+      INSERT INTO teacher_student_map (teacher_id, subject, year, stream, semester, student_id)
+      SELECT DISTINCT t.teacher_id, t.subject, t.year, t.stream, t.semester, s.student_id
       FROM teacher_details_db t
       INNER JOIN student_details_db s 
         ON t.year = s.year 
         AND t.stream = s.stream
         AND FIND_IN_SET(s.division, t.division) > 0
-      ON DUPLICATE KEY UPDATE teacher_id = VALUES(teacher_id)
+      ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP
     `);
 
     const mappedCount = result.affectedRows;

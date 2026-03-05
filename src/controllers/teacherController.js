@@ -470,7 +470,16 @@ export async function getSubjectSessions(req, res, next) {
          s.semester,
          s.stream,
          s.division,
-         COUNT(DISTINCT s.session_id) as session_count
+         COUNT(DISTINCT s.session_id) as session_count,
+         SUM(s.present_count) as total_present,
+         SUM(s.absent_count) as total_absent,
+         ROUND(
+           CASE 
+             WHEN (SUM(s.present_count) + SUM(s.absent_count)) > 0 
+             THEN (SUM(s.present_count) * 100.0 / (SUM(s.present_count) + SUM(s.absent_count)))
+             ELSE 0 
+           END, 2
+         ) as attendance_percentage
        FROM attendance_sessions s
        WHERE s.teacher_id = ?
          AND s.subject IS NOT NULL

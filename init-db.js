@@ -78,7 +78,7 @@ async function initializeDatabase() {
 async function runSchemaMigrations() {
   const connection = await pool.getConnection();
   try {
-    // Migration: Allow multiple subject rows per teacher
+    // Migration 1: Allow multiple subject rows per teacher
     // Drop the UNIQUE KEY on teacher_id alone (prevents multiple subjects per teacher)
     // Replace with a composite unique key on the full assignment
 
@@ -86,45 +86,101 @@ async function runSchemaMigrations() {
     const [compRows] = await connection.query(
       `SHOW INDEX FROM teacher_details_db WHERE Key_name = 'ux_teacher_assignment'`
     );
-    if (compRows.length > 0) {
-      // Migration already applied - nothing to do
-      return;
+    if (compRows.length === 0) {
+      const [uidxRows] = await connection.query(
+        `SHOW INDEX FROM teacher_details_db WHERE Key_name = 'teacher_id'`
+      );
+
+      if (uidxRows.length > 0) {
+        // Disable FK checks so we can safely drop/replace the index
+        // even if other tables reference teacher_details_db(teacher_id)
+        await connection.query(`SET FOREIGN_KEY_CHECKS = 0`);
+
+        try {
+          // Drop the old single-column unique index
+          await connection.query(`ALTER TABLE teacher_details_db DROP INDEX \`teacher_id\``);
+          console.log("🔧 Migration: Dropped UNIQUE KEY `teacher_id` from teacher_details_db");
+
+          // Add composite unique key for multiple subject assignments per teacher
+          await connection.query(`
+            ALTER TABLE teacher_details_db
+            ADD UNIQUE KEY \`ux_teacher_assignment\`
+            (teacher_id(50), subject(100), year(10), stream(50), semester(10), division(50))
+          `);
+          console.log("🔧 Migration: Added composite UNIQUE KEY `ux_teacher_assignment`");
+
+          // Re-add a non-unique index on teacher_id for FK lookups / query performance
+          await connection.query(
+            `ALTER TABLE teacher_details_db ADD INDEX \`idx_teacher_id_lookup\` (teacher_id)`
+          );
+          console.log("🔧 Migration: Added non-unique index `idx_teacher_id_lookup`");
+
+          console.log("✅ Schema migration complete: teacher_details_db supports multiple assignments per teacher");
+        } finally {
+          // Always re-enable FK checks
+          await connection.query(`SET FOREIGN_KEY_CHECKS = 1`);
+        }
+      }
     }
 
-    const [uidxRows] = await connection.query(
-      `SHOW INDEX FROM teacher_details_db WHERE Key_name = 'teacher_id'`
+    // Migration 2: Update teacher_student_map to include year/subject/stream context
+    // This prevents students from being mapped to teachers of different years
+    const [mapColumns] = await connection.query(
+      `SHOW COLUMNS FROM teacher_student_map WHERE Field = 'subject'`
     );
-
-    if (uidxRows.length > 0) {
-      // Disable FK checks so we can safely drop/replace the index
-      // even if other tables reference teacher_details_db(teacher_id)
+    
+    if (mapColumns.length === 0) {
+      console.log("🔧 Migration: Updating teacher_student_map schema to prevent cross-year mappings...");
+      
       await connection.query(`SET FOREIGN_KEY_CHECKS = 0`);
-
+      
       try {
-        // Drop the old single-column unique index
-        await connection.query(`ALTER TABLE teacher_details_db DROP INDEX \`teacher_id\``);
-        console.log("🔧 Migration: Dropped UNIQUE KEY `teacher_id` from teacher_details_db");
-
-        // Add composite unique key for multiple subject assignments per teacher
+        // Backup existing mappings
         await connection.query(`
-          ALTER TABLE teacher_details_db
-          ADD UNIQUE KEY \`ux_teacher_assignment\`
-          (teacher_id(50), subject(100), year(10), stream(50), semester(10), division(50))
+          CREATE TABLE IF NOT EXISTS teacher_student_map_backup_migration AS
+          SELECT * FROM teacher_student_map
         `);
-        console.log("🔧 Migration: Added composite UNIQUE KEY `ux_teacher_assignment`");
-
-        // Re-add a non-unique index on teacher_id for FK lookups / query performance
-        await connection.query(
-          `ALTER TABLE teacher_details_db ADD INDEX \`idx_teacher_id_lookup\` (teacher_id)`
-        );
-        console.log("🔧 Migration: Added non-unique index `idx_teacher_id_lookup`");
-
-        console.log("✅ Schema migration complete: teacher_details_db supports multiple assignments per teacher");
+        
+        // Drop and recreate table with new schema
+        await connection.query(`DROP TABLE IF EXISTS teacher_student_map`);
+        
+        await connection.query(`
+          CREATE TABLE teacher_student_map (
+            id INT AUTO_INCREMENT,
+            teacher_id VARCHAR(50) NOT NULL,
+            subject VARCHAR(100) NOT NULL,
+            year VARCHAR(10) NOT NULL,
+            stream VARCHAR(100) NOT NULL,
+            semester VARCHAR(20) NOT NULL,
+            student_id VARCHAR(50) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY unique_mapping (teacher_id, subject, year, stream, semester, student_id),
+            KEY idx_teacher (teacher_id),
+            KEY idx_student (student_id),
+            KEY idx_year_stream (year, stream),
+            FOREIGN KEY (student_id) REFERENCES student_details_db(student_id) ON DELETE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        `);
+        
+        // Repopulate with correct mappings
+        await connection.query(`
+          INSERT INTO teacher_student_map (teacher_id, subject, year, stream, semester, student_id)
+          SELECT DISTINCT t.teacher_id, t.subject, t.year, t.stream, t.semester, s.student_id
+          FROM teacher_details_db t
+          INNER JOIN student_details_db s 
+            ON t.year = s.year 
+            AND t.stream = s.stream
+            AND FIND_IN_SET(s.division, t.division) > 0
+          ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP
+        `);
+        
+        console.log("✅ Migration complete: teacher_student_map now prevents cross-year mappings");
       } finally {
-        // Always re-enable FK checks
         await connection.query(`SET FOREIGN_KEY_CHECKS = 1`);
       }
     }
+
   } catch (err) {
     console.error("⚠️  Schema migration error (non-fatal):", err.message);
     // Ensure FK checks are re-enabled even on outer error

@@ -6,7 +6,6 @@ import {
   toggleLoading,
 } from "./main.js";
 
-const summaryAverageEl = document.querySelector("[data-summary-average]");
 const summaryPresentEl = document.querySelector("[data-summary-present]");
 const summaryStreamsEl = document.querySelector("[data-summary-streams]");
 const summaryDivisionsEl = document.querySelector("[data-summary-divisions]");
@@ -141,7 +140,6 @@ async function loadDashboard() {
     }
 
     const summary = data?.summary || {};
-    summaryAverageEl.textContent = `${summary.averagePercentage ?? 0}%`;
     summaryPresentEl.textContent = summary.totalPresent ?? 0;
 
     // Update new stats
@@ -975,7 +973,7 @@ async function showSubjectSessionsModal() {
 
   if (!list) return;
 
-  list.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+  list.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
   subjectSessionsModal.showModal();
 
   try {
@@ -994,16 +992,17 @@ async function showSubjectSessionsModal() {
           <td>${session.stream || "—"}</td>
           <td>${session.division || "—"}</td>
           <td><strong>${session.session_count || 0}</strong></td>
+          <td><strong>${session.attendance_percentage || 0}%</strong></td>
         </tr>
       `,
         )
         .join("");
     } else {
-      list.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">No subject sessions found</td></tr>';
+      list.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No subject sessions found</td></tr>';
     }
   } catch (error) {
     console.error("Error loading subject sessions:", error);
-    list.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--color-danger);">Failed to load subject sessions</td></tr>';
+    list.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--color-danger);">Failed to load subject sessions</td></tr>';
   }
 }
 
