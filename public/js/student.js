@@ -5,6 +5,7 @@ const profileName = document.querySelector("[data-profile-name]");
 const profileRoll = document.querySelector("[data-profile-roll]");
 const profileStream = document.querySelector("[data-profile-stream]");
 const profileDivision = document.querySelector("[data-profile-division]");
+const studentHeader = document.querySelector("[data-student-header]");
 
 const summarySessionsEl = document.querySelector("[data-summary-sessions]");
 const summaryPresentEl = document.querySelector("[data-summary-present]");
@@ -94,6 +95,14 @@ function handleError(error, fallback = "Something went wrong") {
   });
 }
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Morning";
+  if (hour < 17) return "Afternoon";
+  if (hour < 21) return "Evening";
+  return "Hello";
+}
+
 async function loadDashboard() {
   try {
     const data = await apiFetch("/api/student/dashboard");
@@ -105,6 +114,12 @@ async function loadDashboard() {
     profileRoll.textContent = studentData.rollNo || "–";
     profileStream.textContent = studentData.stream || "–";
     profileDivision.textContent = studentData.division || "–";
+
+    // Update header with greeting and student name
+    if (studentHeader && studentData.name) {
+      const greeting = getGreeting();
+      studentHeader.textContent = `${greeting}, ${studentData.name}`;
+    }
 
     // Update summary
     const summary = data.summary || {};
