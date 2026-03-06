@@ -50,9 +50,9 @@ export async function studentDashboard(req, res, next) {
          s.stream,
          s.division,
          COUNT(DISTINCT ar.session_id) as total_sessions,
-         SUM(CASE WHEN ar.status = 'P' THEN 1 ELSE 0 END) as present_count,
-         SUM(CASE WHEN ar.status = 'A' THEN 1 ELSE 0 END) as absent_count,
-         ROUND((SUM(CASE WHEN ar.status = 'P' THEN 1 ELSE 0 END) / COUNT(DISTINCT ar.session_id)) * 100, 1) as percentage
+         COUNT(DISTINCT CASE WHEN ar.status = 'P' THEN ar.session_id END) as present_count,
+         COUNT(DISTINCT CASE WHEN ar.status = 'A' THEN ar.session_id END) as absent_count,
+         ROUND((COUNT(DISTINCT CASE WHEN ar.status = 'P' THEN ar.session_id END) / COUNT(DISTINCT ar.session_id)) * 100, 2) as percentage
        FROM attendance_records ar
        JOIN attendance_sessions s ON ar.session_id = s.session_id
        WHERE ar.student_id = ?
@@ -295,8 +295,8 @@ export async function getAttendanceCalendar(req, res, next) {
       `SELECT 
          DATE(s.started_at) as date,
          COUNT(DISTINCT ar.session_id) as total,
-         SUM(CASE WHEN ar.status = 'P' THEN 1 ELSE 0 END) as present,
-         SUM(CASE WHEN ar.status = 'A' THEN 1 ELSE 0 END) as absent
+         COUNT(DISTINCT CASE WHEN ar.status = 'P' THEN ar.session_id END) as present,
+         COUNT(DISTINCT CASE WHEN ar.status = 'A' THEN ar.session_id END) as absent
        FROM attendance_records ar
        JOIN attendance_sessions s ON ar.session_id = s.session_id
        WHERE ar.student_id = ?

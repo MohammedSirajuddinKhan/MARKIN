@@ -4,24 +4,27 @@ import ExcelJS from "exceljs";
 class DefaulterService {
     /**
      * Get defaulter list for a specific month with custom threshold
+     * NOW CALCULATES OVERALL ATTENDANCE ACROSS ALL SUBJECTS
      */
     async getDefaulterList(filters = {}) {
-        const { month, year, stream, division, subject, threshold = 75 } = filters;
+        const { month, year, stream, division, subject, threshold = 75, teacherId = null } = filters;
 
+        // NEW APPROACH: Calculate overall attendance across ALL subjects for each student
         let query = `
       SELECT 
-        mas.student_id,
-        mas.student_name,
-        mas.roll_no,
-        mas.year,
-        mas.stream,
-        mas.division,
-        mas.subject,
+        s.student_id,
+        s.student_name,
+        s.roll_no,
+        s.year,
+        s.stream,
+        s.division,
+        SUM(mas.total_lectures) as total_lectures,
+        SUM(mas.attended_lectures) as attended_lectures,
+        ROUND((SUM(mas.attended_lectures) / NULLIF(SUM(mas.total_lectures), 0)) * 100, 2) as attendance_percentage,
+        GROUP_CONCAT(DISTINCT mas.subject ORDER BY mas.subject SEPARATOR ', ') as subjects,
+        COUNT(DISTINCT mas.subject) as subject_count,
         mas.month,
         mas.year_value,
-        mas.total_lectures,
-        mas.attended_lectures,
-        mas.attendance_percentage,
         CASE 
           WHEN mas.month = 1 THEN 'January'
           WHEN mas.month = 2 THEN 'February'
@@ -36,11 +39,22 @@ class DefaulterService {
           WHEN mas.month = 11 THEN 'November'
           WHEN mas.month = 12 THEN 'December'
         END as month_name
-      FROM monthly_attendance_summary mas
-      WHERE mas.attendance_percentage < ?
+      FROM student_details_db s
+      INNER JOIN monthly_attendance_summary mas ON s.student_id = mas.student_id
     `;
 
-        const params = [threshold];
+        const params = [];
+
+        // If teacherId is provided, filter students based on teacher-student mappings
+        if (teacherId) {
+            query += `
+      INNER JOIN teacher_student_map tsm ON s.student_id = tsm.student_id
+      WHERE tsm.teacher_id = ?
+      `;
+            params.push(teacherId);
+        } else {
+            query += ` WHERE 1=1`;
+        }
 
         if (month) {
             query += ` AND mas.month = ?`;
@@ -53,21 +67,26 @@ class DefaulterService {
         }
 
         if (stream) {
-            query += ` AND mas.stream = ?`;
+            query += ` AND s.stream = ?`;
             params.push(stream);
         }
 
         if (division) {
-            query += ` AND mas.division = ?`;
+            query += ` AND s.division = ?`;
             params.push(division);
         }
 
-        if (subject) {
-            query += ` AND mas.subject = ?`;
-            params.push(subject);
-        }
+        // NOTE: Do NOT filter by subject here - we want ALL subjects for overall attendance
+        // The subject filter would exclude students who have other subjects
 
-        query += ` ORDER BY mas.year_value DESC, mas.month DESC, mas.stream, mas.division, mas.student_id`;
+        // Group by student to calculate overall attendance
+        query += ` 
+      GROUP BY s.student_id, s.student_name, s.roll_no, s.year, s.stream, s.division, mas.month, mas.year_value
+      HAVING attendance_percentage < ?
+      ORDER BY s.year DESC, mas.month DESC, s.stream, s.division, s.student_name
+    `;
+
+        params.push(threshold);
 
         const [rows] = await pool.query(query, params);
         return rows;
@@ -75,45 +94,65 @@ class DefaulterService {
 
     /**
      * Get overall defaulters (across all subjects) with custom threshold
+     * NOW CALCULATES OVERALL ATTENDANCE ACROSS ALL SUBJECTS
      */
     async getOverallDefaulters(filters = {}) {
-        const { stream, division, year, threshold = 75 } = filters;
+        const { stream, division, year, threshold = 75, teacherId = null } = filters;
 
+        // Calculate overall attendance across ALL subjects for each student
         let query = `
       SELECT 
-        sas.student_id,
-        sd.student_name,
-        sd.roll_no,
-        sd.year,
-        sd.stream,
-        sd.division,
-        sas.subject,
-        sas.total_lectures,
-        sas.attended_lectures,
-        sas.attendance_percentage
-      FROM student_attendance_stats sas
-      JOIN student_details_db sd ON sas.student_id = sd.student_id
-      WHERE sas.attendance_percentage < ?
+        s.student_id,
+        s.student_name,
+        s.roll_no,
+        s.year,
+        s.stream,
+        s.division,
+        SUM(sas.total_lectures) as total_lectures,
+        SUM(sas.attended_lectures) as attended_lectures,
+        ROUND((SUM(sas.attended_lectures) / NULLIF(SUM(sas.total_lectures), 0)) * 100, 2) as attendance_percentage,
+        GROUP_CONCAT(DISTINCT sas.subject ORDER BY sas.subject SEPARATOR ', ') as subjects,
+        COUNT(DISTINCT sas.subject) as subject_count
+      FROM student_details_db s
+      INNER JOIN student_attendance_stats sas ON s.student_id = sas.student_id
     `;
 
-        const params = [threshold];
+        const params = [];
+
+        // If teacherId is provided, filter students based on teacher-student mappings
+        if (teacherId) {
+            query += `
+      INNER JOIN teacher_student_map tsm ON s.student_id = tsm.student_id
+      WHERE tsm.teacher_id = ?
+      `;
+            params.push(teacherId);
+        } else {
+            query += ` WHERE 1=1`;
+        }
 
         if (stream) {
-            query += ` AND sd.stream = ?`;
+            query += ` AND s.stream = ?`;
             params.push(stream);
         }
 
         if (division) {
-            query += ` AND sd.division = ?`;
+            query += ` AND s.division = ?`;
             params.push(division);
         }
 
         if (year) {
-            query += ` AND sd.year = ?`;
+            query += ` AND s.year = ?`;
             params.push(year);
         }
 
-        query += ` ORDER BY sd.stream, sd.division, sd.student_id, sas.subject`;
+        // Group by student to calculate overall attendance
+        query += ` 
+      GROUP BY s.student_id, s.student_name, s.roll_no, s.year, s.stream, s.division
+      HAVING attendance_percentage < ?
+      ORDER BY s.stream, s.division, s.student_name
+    `;
+
+        params.push(threshold);
 
         const [rows] = await pool.query(query, params);
         return rows;
@@ -146,12 +185,13 @@ class DefaulterService {
                     "Year",
                     "Stream",
                     "Division",
-                    "Subject",
+                    "Subjects (All)",
+                    "Subject Count",
                     "Month",
                     "Year",
-                    "Total Lectures",
-                    "Attended",
-                    "Attendance %",
+                    "Total Lectures (All Subjects)",
+                    "Attended (All Subjects)",
+                    "Overall Attendance %",
                 ]
                 : [
                     "Student ID",
@@ -160,10 +200,11 @@ class DefaulterService {
                     "Year",
                     "Stream",
                     "Division",
-                    "Subject",
-                    "Total Lectures",
-                    "Attended",
-                    "Attendance %",
+                    "Subjects (All)",
+                    "Subject Count",
+                    "Total Lectures (All Subjects)",
+                    "Attended (All Subjects)",
+                    "Overall Attendance %",
                 ];
 
         worksheet.addRow(headers);
@@ -187,7 +228,8 @@ class DefaulterService {
                         defaulter.year,
                         defaulter.stream,
                         defaulter.division,
-                        defaulter.subject,
+                        defaulter.subjects || defaulter.subject || "N/A",
+                        defaulter.subject_count || 1,
                         defaulter.month_name || defaulter.month,
                         defaulter.year_value,
                         defaulter.total_lectures,
@@ -201,7 +243,8 @@ class DefaulterService {
                         defaulter.year,
                         defaulter.stream,
                         defaulter.division,
-                        defaulter.subject,
+                        defaulter.subjects || defaulter.subject || "N/A",
+                        defaulter.subject_count || 1,
                         defaulter.total_lectures,
                         defaulter.attended_lectures,
                         defaulter.attendance_percentage,
@@ -231,7 +274,7 @@ class DefaulterService {
             d.year,
             d.stream,
             d.division,
-            d.subject,
+            d.subjects || d.subject || 'N/A',
             d.month,
             d.year_value,
             d.attendance_percentage,

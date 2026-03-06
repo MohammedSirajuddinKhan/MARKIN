@@ -144,7 +144,7 @@ export async function getTeacherStats(teacherId) {
 
   const total = (summary.total_present || 0) + (summary.total_absent || 0);
   const average = total
-    ? Math.round(((summary.total_present || 0) / total) * 100)
+    ? parseFloat((((summary.total_present || 0) / total) * 100).toFixed(2))
     : 0;
 
   // Get total mapped students count
@@ -178,8 +178,8 @@ export async function getTeacherStats(teacherId) {
 export async function getStudentStats(studentId) {
   const [records] = await pool.query(
     `SELECT COUNT(DISTINCT ar.session_id) as total,
-            SUM(CASE WHEN ar.status = 'P' THEN 1 ELSE 0 END) as present,
-            SUM(CASE WHEN ar.status = 'A' THEN 1 ELSE 0 END) as absent
+            COUNT(DISTINCT CASE WHEN ar.status = 'P' THEN ar.session_id END) as present,
+            COUNT(DISTINCT CASE WHEN ar.status = 'A' THEN ar.session_id END) as absent
      FROM attendance_records ar
      WHERE ar.student_id = ?`,
     [studentId],
@@ -189,7 +189,7 @@ export async function getStudentStats(studentId) {
   const total = stats.total || 0;
   const present = stats.present || 0;
   const absent = stats.absent || 0;
-  const percentage = total ? Math.round((present / total) * 100) : 0;
+  const percentage = total ? parseFloat(((present / total) * 100).toFixed(2)) : 0;
 
   const [recentSessions] = await pool.query(
     `SELECT s.started_at as session_date, s.subject, ar.status, s.year, s.stream, s.division
@@ -206,7 +206,7 @@ export async function getStudentStats(studentId) {
   const [subjectBreakdown] = await pool.query(
     `SELECT s.subject,
             COUNT(DISTINCT ar.session_id) as total,
-            SUM(CASE WHEN ar.status = 'P' THEN 1 ELSE 0 END) as present
+            COUNT(DISTINCT CASE WHEN ar.status = 'P' THEN ar.session_id END) as present
      FROM attendance_records ar
      JOIN attendance_sessions s ON ar.session_id = s.session_id
      WHERE ar.student_id = ?

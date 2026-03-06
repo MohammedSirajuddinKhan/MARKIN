@@ -35,11 +35,31 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function updateSteps() {
     if (!stepsList) return;
-    const labels = stepsList.querySelectorAll("li");
-    labels.forEach((label, index) => {
+    const steps = stepsList.querySelectorAll(".import-step");
+
+    steps.forEach((step, index) => {
       const stepNumber = index + 1;
-      label.style.opacity = stepNumber <= currentStage ? "1" : "0.45";
-      label.style.fontWeight = stepNumber === currentStage ? "600" : "400";
+
+      // Remove all state classes first
+      step.classList.remove("pending", "active", "completed");
+
+      // Add appropriate state class
+      if (stepNumber < currentStage) {
+        step.classList.add("completed");
+      } else if (stepNumber === currentStage) {
+        step.classList.add("active");
+      } else {
+        step.classList.add("pending");
+      }
+
+      // Add animation when step becomes completed
+      if (stepNumber < currentStage && !step.dataset.animated) {
+        step.dataset.animated = "true";
+        step.style.animation = "none";
+        setTimeout(() => {
+          step.style.animation = "stepComplete 0.5s ease";
+        }, 10);
+      }
     });
   }
 
@@ -72,12 +92,63 @@ window.addEventListener("DOMContentLoaded", () => {
 
       // Store data globally for modal access
       window.adminStatsData = data;
+
+      // Update import checklist based on existing data
+      updateImportChecklistFromData(data);
     } catch (error) {
       showToast({
         title: "Unable to load stats",
         message: error.message,
         type: "error",
       });
+    }
+  }
+
+  function updateImportChecklistFromData(data) {
+    // Only update checklist if no active import is in progress
+    // Check if there's data in preview (active import session)
+    const hasActiveImport = previewTable?.style.display !== "none" &&
+      previewBody?.children.length > 0;
+
+    if (hasActiveImport) {
+      // Don't override the current import flow
+      console.log("⏭️ Skipping checklist update - active import in progress");
+      return;
+    }
+
+    const studentsCount = data.students || 0;
+    const teachersCount = data.teachers || 0;
+
+    console.log(`📊 Updating checklist from data: ${studentsCount} students, ${teachersCount} teachers`);
+
+    // Update checklist based on what's already imported
+    if (studentsCount > 0 && teachersCount > 0) {
+      // Both students and teachers exist - all steps completed
+      currentStage = 3;
+      importState.students = studentsCount;
+      importState.teachers = teachersCount;
+
+      // Mark all steps as completed
+      const steps = stepsList?.querySelectorAll(".import-step");
+      steps?.forEach((step, index) => {
+        step.classList.remove("pending", "active");
+        step.classList.add("completed");
+        if (!step.dataset.animated) {
+          step.dataset.animated = "true";
+        }
+      });
+      console.log("✅ All import steps marked as completed");
+    } else if (studentsCount > 0) {
+      // Only students exist - step 1 completed, step 2 active
+      currentStage = 2;
+      importState.students = studentsCount;
+      updateSteps();
+      console.log("✅ Step 1 completed, Step 2 active");
+    } else {
+      // No data - start from step 1
+      currentStage = 1;
+      updateSteps();
+      console.log("📝 Starting fresh - Step 1 active");
     }
   }
 
@@ -197,7 +268,20 @@ window.addEventListener("DOMContentLoaded", () => {
           renderPreview(payload.preview);
 
           importState[type] = payload.total;
-          currentStage = type === "students" ? 2 : 3;
+
+          // If uploading students, it's the start of a new import cycle
+          if (type === "students") {
+            currentStage = 2; // Student upload complete, teachers next
+            // Reset animation states for fresh import cycle
+            const steps = stepsList?.querySelectorAll(".import-step");
+            steps?.forEach(step => {
+              delete step.dataset.animated;
+              step.style.animation = "none";
+            });
+          } else {
+            currentStage = 3; // Teachers uploaded, ready to confirm
+          }
+
           updateSteps();
 
           showToast({
@@ -222,9 +306,9 @@ window.addEventListener("DOMContentLoaded", () => {
     // Ask user if they want to clear existing data
     const clearExisting = confirm(
       "Do you want to CLEAR ALL existing data before importing?\n\n" +
-        "• Click OK to DELETE all existing students/teachers and import fresh data\n" +
-        "• Click Cancel to ADD/UPDATE the imported data to existing records\n\n" +
-        "Recommended: Choose OK for a clean import with only the uploaded data.",
+      "• Click OK to DELETE all existing students/teachers and import fresh data\n" +
+      "• Click Cancel to ADD/UPDATE the imported data to existing records\n\n" +
+      "Recommended: Choose OK for a clean import with only the uploaded data.",
     );
 
     toggleLoading(confirmButton, true);
@@ -238,10 +322,9 @@ window.addEventListener("DOMContentLoaded", () => {
       });
 
       renderPreview([]);
-      importState.students = 0;
-      importState.teachers = 0;
-      currentStage = 1;
-      updateSteps();
+
+      // Don't reset immediately - let loadStats update based on actual data
+      // This ensures the checklist reflects the database state
 
       let message = "All data has been stored successfully.";
       if (result.results?.cleared) {
@@ -254,7 +337,7 @@ window.addEventListener("DOMContentLoaded", () => {
         type: "success",
       });
 
-      // Real-time dashboard update
+      // Real-time dashboard update - this will update the checklist too
       await loadStats();
       await loadActivity();
 
@@ -485,21 +568,21 @@ window.addEventListener("DOMContentLoaded", () => {
   deleteDataButton?.addEventListener("click", async () => {
     const confirmed = confirm(
       "⚠️ WARNING: This will permanently delete ALL data including:\n\n" +
-        "• All students\n" +
-        "• All teachers\n" +
-        "• All attendance sessions and records\n" +
-        "• All student-teacher mappings\n" +
-        "• All activity logs\n\n" +
-        "CSV backup records will be preserved.\n\n" +
-        "This action CANNOT be undone. Are you absolutely sure?",
+      "• All students\n" +
+      "• All teachers\n" +
+      "• All attendance sessions and records\n" +
+      "• All student-teacher mappings\n" +
+      "• All activity logs\n\n" +
+      "CSV backup records will be preserved.\n\n" +
+      "This action CANNOT be undone. Are you absolutely sure?",
     );
 
     if (!confirmed) return;
 
     const doubleConfirmed = confirm(
       "This is your last chance to cancel.\n\n" +
-        "Type deletion will proceed in 3 seconds.\n\n" +
-        "Click OK to proceed with deletion or Cancel to abort.",
+      "Type deletion will proceed in 3 seconds.\n\n" +
+      "Click OK to proceed with deletion or Cancel to abort.",
     );
 
     if (!doubleConfirmed) return;
@@ -534,10 +617,10 @@ window.addEventListener("DOMContentLoaded", () => {
   clearHistoryButton?.addEventListener("click", async () => {
     const confirmed = confirm(
       "⚠️ WARNING: This will permanently delete ALL attendance history records including:\n\n" +
-        "• All saved Excel/CSV files\n" +
-        "• All download links\n" +
-        "• All backup attendance data\n\n" +
-        "This action CANNOT be undone. Are you sure you want to clear the history?",
+      "• All saved Excel/CSV files\n" +
+      "• All download links\n" +
+      "• All backup attendance data\n\n" +
+      "This action CANNOT be undone. Are you sure you want to clear the history?",
     );
 
     if (!confirmed) return;
@@ -841,20 +924,26 @@ window.addEventListener("DOMContentLoaded", () => {
       if (defaultersBody) {
         if (!defaulters || defaulters.length === 0) {
           defaultersBody.innerHTML =
-            '<tr><td colspan="6">No defaulters found with the selected criteria</td></tr>';
+            '<tr><td colspan="8">No defaulters found with the selected criteria</td></tr>';
         } else {
           const rows = defaulters
             .map(
-              (d) => `
+              (d) => {
+                const subjects = d.subjects || d.subject || "N/A";
+                const subjectCount = d.subject_count || 1;
+                const lecturesInfo = `${d.attended_lectures || 0} / ${d.total_lectures || 0}`;
+                return `
             <tr>
               <td>${d.student_id || "—"}</td>
               <td>${d.student_name || "—"}</td>
               <td>${d.year || "—"}</td>
               <td>${d.stream || "—"}</td>
               <td>${d.division || "—"}</td>
+              <td>${lecturesInfo}</td>
               <td style="color: #dc3545; font-weight: 600;">${parseFloat(d.attendance_percentage || 0).toFixed(2)}%</td>
             </tr>
-          `,
+          `;
+              },
             )
             .join("");
           defaultersBody.innerHTML = rows;
@@ -1101,7 +1190,7 @@ window.addEventListener("DOMContentLoaded", () => {
       adminDefaulterHistoryBody.innerHTML = history
         .map((item) => {
           const date = new Date(item.created_at).toLocaleString();
-          const threshold = parseFloat(item.threshold || 75).toFixed(0);
+          const threshold = item.threshold || 75;
           return `
           <tr>
             <td>${item.teacher_name || item.teacher_id || "—"}</td>
@@ -1145,7 +1234,7 @@ window.addEventListener("DOMContentLoaded", () => {
         `/api/admin/defaulters/history/${id}`,
       );
 
-      const threshold = parseFloat(record.threshold || 75).toFixed(0);
+      const threshold = record.threshold || 75;
       const date = new Date(record.created_at).toLocaleString();
       if (adminDhDetailSummary) {
         adminDhDetailSummary.textContent = `${record.teacher_name || record.teacher_id} · ${record.filters_summary || ""} · ${threshold}% threshold · ${defaulters.length} defaulters · ${date}`;
@@ -1169,7 +1258,7 @@ window.addEventListener("DOMContentLoaded", () => {
             <td>${d.year || "—"}</td>
             <td>${d.stream || "—"}</td>
             <td>${d.division || "—"}</td>
-            <td>${d.subject || "—"}</td>
+            <td>${d.attended_lectures || 0} / ${d.total_lectures || 0}</td>
             <td style="color:#dc3545;font-weight:600;">${parseFloat(d.attendance_percentage || 0).toFixed(2)}%</td>
           </tr>`,
           )

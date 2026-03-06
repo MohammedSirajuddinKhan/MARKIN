@@ -13,7 +13,7 @@ async function fixStudentTeacherMappings() {
         const [tables] = await connection.query(`
             SHOW TABLES LIKE 'teacher_student_map'
         `);
-        
+
         if (tables.length > 0) {
             console.log('📦 Backing up current mappings...');
             await connection.query(`
@@ -21,7 +21,7 @@ async function fixStudentTeacherMappings() {
                 SELECT * FROM teacher_student_map
             `);
             console.log('✅ Backup created\n');
-            
+
             // Drop the old mapping table
             console.log('🗑️  Step 2: Dropping old mapping table...');
             await connection.query('DROP TABLE IF EXISTS teacher_student_map');
@@ -46,9 +46,8 @@ async function fixStudentTeacherMappings() {
                 UNIQUE KEY unique_mapping (teacher_id, subject, year, stream, semester, student_id),
                 KEY idx_teacher (teacher_id),
                 KEY idx_student (student_id),
-                KEY idx_year_stream (year, stream),
-                FOREIGN KEY (student_id) REFERENCES student_details_db(student_id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+                KEY idx_year_stream (year, stream)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         `);
         console.log('✅ New table created\n');
 

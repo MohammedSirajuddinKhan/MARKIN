@@ -168,7 +168,7 @@ function renderSubjectCards(subjects) {
     const total = subject.total || 0;
     const present = subject.present || 0;
     const absent = total - present;
-    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+    const percentage = total > 0 ? parseFloat(((present / total) * 100).toFixed(2)) : 0;
 
     return `
       <div class="card" style="cursor: pointer;" data-subject-card data-subject-name="${subject.subject}" data-subject-total="${total}" data-subject-present="${present}" data-subject-absent="${absent}" data-subject-percentage="${percentage}">
@@ -209,7 +209,7 @@ function attachSubjectCardHandlers() {
       const total = parseInt(card.dataset.subjectTotal) || 0;
       const present = parseInt(card.dataset.subjectPresent) || 0;
       const absent = parseInt(card.dataset.subjectAbsent) || 0;
-      const percentage = parseInt(card.dataset.subjectPercentage) || 0;
+      const percentage = parseFloat(card.dataset.subjectPercentage) || 0;
 
       showSubjectDetailModal(subjectName, total, present, absent, percentage);
     });

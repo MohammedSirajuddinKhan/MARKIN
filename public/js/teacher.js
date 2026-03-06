@@ -992,7 +992,7 @@ async function showSubjectSessionsModal() {
           <td>${session.stream || "—"}</td>
           <td>${session.division || "—"}</td>
           <td><strong>${session.session_count || 0}</strong></td>
-          <td><strong>${session.attendance_percentage || 0}%</strong></td>
+          <td><strong>${parseFloat(session.attendance_percentage || 0).toFixed(2)}%</strong></td>
         </tr>
       `,
         )
@@ -1405,7 +1405,7 @@ async function openDefaulterHistoryDetail(id) {
 
   defaulterHistoryDetailModal.showModal();
   defaulterHistoryDetailBody.innerHTML =
-    '<tr><td colspan="8">Loading...</td></tr>';
+    '<tr><td colspan="7">Loading...</td></tr>';
   if (defaulterHistoryDetailSummary)
     defaulterHistoryDetailSummary.textContent = "Loading...";
 
@@ -1420,7 +1420,7 @@ async function openDefaulterHistoryDetail(id) {
 
     if (!defaulters || defaulters.length === 0) {
       defaulterHistoryDetailBody.innerHTML =
-        '<tr><td colspan="8" style="text-align:center; color:#27ae60">✅ No defaulters were recorded in this list.</td></tr>';
+        '<tr><td colspan="7" style="text-align:center; color:#27ae60">✅ No defaulters were recorded in this list.</td></tr>';
       return;
     }
 
@@ -1434,9 +1434,9 @@ async function openDefaulterHistoryDetail(id) {
           <td>${d.year || d.year_value || "—"}</td>
           <td>${d.stream || "—"}</td>
           <td>${d.division || "—"}</td>
-          <td>${d.subject || "—"}</td>
+          <td>${d.attended_lectures || 0} / ${d.total_lectures || 0}</td>
           <td style="color:#e74c3c; font-weight:600">${d.attendance_percentage != null
-            ? parseFloat(d.attendance_percentage).toFixed(1) + "%"
+            ? parseFloat(d.attendance_percentage).toFixed(2) + "%"
             : "—"
           }</td>
         </tr>
@@ -1444,7 +1444,7 @@ async function openDefaulterHistoryDetail(id) {
       )
       .join("");
   } catch (error) {
-    defaulterHistoryDetailBody.innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+    defaulterHistoryDetailBody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
   }
 }
 
@@ -1829,7 +1829,9 @@ function initDefaulterButton() {
 
       defaulterResultsBody.innerHTML = defaulters
         .map(
-          (d, i) => `
+          (d, i) => {
+            const lecturesInfo = `${d.attended_lectures || 0} / ${d.total_lectures || 0}`;
+            return `
         <tr>
           <td>${i + 1}</td>
           <td>${d.roll_no || "—"}</td>
@@ -1837,13 +1839,14 @@ function initDefaulterButton() {
           <td>${d.year || d.year_value || "—"}</td>
           <td>${d.stream || "—"}</td>
           <td>${d.division || "—"}</td>
-          <td>${d.subject || "—"}</td>
+          <td>${lecturesInfo}</td>
           <td style="color:#e74c3c; font-weight:600">${d.attendance_percentage != null
-              ? parseFloat(d.attendance_percentage).toFixed(1) + "%"
-              : "—"
-            }</td>
+                ? parseFloat(d.attendance_percentage).toFixed(2) + "%"
+                : "—"
+              }</td>
         </tr>
-      `,
+      `;
+          },
         )
         .join("");
     } catch (error) {

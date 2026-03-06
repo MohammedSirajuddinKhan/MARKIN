@@ -45,9 +45,8 @@ async function fixTeacherSchema() {
         teacher_id VARCHAR(50) NOT NULL,
         student_id VARCHAR(50) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (teacher_id, student_id),
-        FOREIGN KEY (student_id) REFERENCES student_details_db(student_id) ON DELETE CASCADE
-      )
+        PRIMARY KEY (teacher_id, student_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
         console.log('✅ teacher_student_map table recreated\n');
 

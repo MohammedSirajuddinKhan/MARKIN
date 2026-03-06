@@ -66,7 +66,7 @@ export function formatDateTime(value) {
 
 export function asPercentage(part, whole) {
   if (!whole) return "0%";
-  return `${Math.round((part / whole) * 100)}%`;
+  return `${((part / whole) * 100).toFixed(2)}%`;
 }
 
 export function toggleLoading(element, state) {

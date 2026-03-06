@@ -1075,7 +1075,7 @@ export async function teacherGetDefaulterList(req, res, next) {
       threshold = 75,
     } = req.query;
 
-    // Get teacher's details to fall back to their assigned stream/subject
+    // Get teacher's details to fall back to their assigned stream
     const [teacher] = await pool.query(
       `SELECT stream, subject FROM teacher_details_db WHERE teacher_id = ?`,
       [teacherId],
@@ -1086,7 +1086,7 @@ export async function teacherGetDefaulterList(req, res, next) {
     }
 
     const filterStream = queryStream || teacher[0].stream;
-    const filterSubject = teacher[0].subject;
+    // NOTE: We no longer filter by subject - we want overall attendance across ALL subjects
 
     let defaulters;
     if (type === "overall") {
@@ -1094,7 +1094,7 @@ export async function teacherGetDefaulterList(req, res, next) {
         stream: filterStream,
         division,
         year,
-        subject: filterSubject,
+        teacherId: teacherId, // Pass teacherId to filter based on mappings
         threshold: parseFloat(threshold),
       });
     } else {
@@ -1103,7 +1103,7 @@ export async function teacherGetDefaulterList(req, res, next) {
         year: year ? parseInt(year) : undefined,
         stream: filterStream,
         division,
-        subject: filterSubject,
+        teacherId: teacherId, // Pass teacherId to filter based on mappings
         threshold: parseFloat(threshold),
       });
     }
@@ -1177,11 +1177,10 @@ export async function teacherDownloadDefaulterList(req, res, next) {
     }
 
     const teacherStream = teacher[0].stream;
-    const teacherSubject = teacher[0].subject;
 
     // Use provided filters or fall back to teacher's assigned values
     const filterStream = stream || teacherStream;
-    const filterSubject = subject || teacherSubject;
+    // NOTE: We no longer filter by subject - we want overall attendance across ALL subjects
 
     let defaulters;
     if (type === "overall") {
@@ -1189,7 +1188,7 @@ export async function teacherDownloadDefaulterList(req, res, next) {
         stream: filterStream,
         division,
         year,
-        subject: filterSubject,
+        teacherId: teacherId, // Pass teacherId to filter based on mappings
         threshold: parseFloat(threshold),
       });
     } else {
@@ -1198,7 +1197,7 @@ export async function teacherDownloadDefaulterList(req, res, next) {
         year: year ? parseInt(year) : undefined,
         stream: filterStream,
         division,
-        subject: filterSubject,
+        teacherId: teacherId, // Pass teacherId to filter based on mappings
         threshold: parseFloat(threshold),
       });
     }
@@ -1237,7 +1236,6 @@ export async function teacherDownloadDefaulterList(req, res, next) {
         year,
         stream: filterStream,
         division,
-        subject: filterSubject,
       },
     });
 

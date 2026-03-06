@@ -125,25 +125,35 @@ async function runSchemaMigrations() {
 
     // Migration 2: Update teacher_student_map to include year/subject/stream context
     // This prevents students from being mapped to teachers of different years
-    const [mapColumns] = await connection.query(
-      `SHOW COLUMNS FROM teacher_student_map WHERE Field = 'subject'`
+
+    // First check if the table exists
+    const [tableExists] = await connection.query(
+      `SHOW TABLES LIKE 'teacher_student_map'`
     );
-    
+
+    let mapColumns = [];
+    if (tableExists.length > 0) {
+      // Table exists, check if it has the subject column
+      [mapColumns] = await connection.query(
+        `SHOW COLUMNS FROM teacher_student_map WHERE Field = 'subject'`
+      );
+    }
+
     if (mapColumns.length === 0) {
       console.log("🔧 Migration: Updating teacher_student_map schema to prevent cross-year mappings...");
-      
+
       await connection.query(`SET FOREIGN_KEY_CHECKS = 0`);
-      
+
       try {
         // Backup existing mappings
         await connection.query(`
           CREATE TABLE IF NOT EXISTS teacher_student_map_backup_migration AS
           SELECT * FROM teacher_student_map
         `);
-        
+
         // Drop and recreate table with new schema
         await connection.query(`DROP TABLE IF EXISTS teacher_student_map`);
-        
+
         await connection.query(`
           CREATE TABLE teacher_student_map (
             id INT AUTO_INCREMENT,
@@ -158,11 +168,10 @@ async function runSchemaMigrations() {
             UNIQUE KEY unique_mapping (teacher_id, subject, year, stream, semester, student_id),
             KEY idx_teacher (teacher_id),
             KEY idx_student (student_id),
-            KEY idx_year_stream (year, stream),
-            FOREIGN KEY (student_id) REFERENCES student_details_db(student_id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            KEY idx_year_stream (year, stream)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         `);
-        
+
         // Repopulate with correct mappings
         await connection.query(`
           INSERT INTO teacher_student_map (teacher_id, subject, year, stream, semester, student_id)
@@ -174,7 +183,7 @@ async function runSchemaMigrations() {
             AND FIND_IN_SET(s.division, t.division) > 0
           ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP
         `);
-        
+
         console.log("✅ Migration complete: teacher_student_map now prevents cross-year mappings");
       } finally {
         await connection.query(`SET FOREIGN_KEY_CHECKS = 1`);
