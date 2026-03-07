@@ -1525,7 +1525,7 @@ export async function teacherSearchStudent(req, res, next) {
     // If single letter, search only division field
     // If 1-3 digits, search only roll_no field
     let query, params;
-    
+
     if (isSingleLetter) {
       query = `SELECT 
         s.student_id,

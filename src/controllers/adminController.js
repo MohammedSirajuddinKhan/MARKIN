@@ -1699,7 +1699,7 @@ export async function searchStudent(req, res, next) {
     // If single letter, search only division field
     // If 1-3 digits, search only roll_no field
     let query, params;
-    
+
     if (isSingleLetter) {
       query = `SELECT 
         s.student_id,
@@ -1805,7 +1805,7 @@ export async function searchTeacher(req, res, next) {
     // Use DISTINCT to get unique teacher and subquery for student count
     // If single letter, search only division field
     let query, params;
-    
+
     if (isSingleLetter) {
       query = `SELECT 
         t.teacher_id,
@@ -1981,7 +1981,7 @@ export async function changeAdminPassword(req, res, next) {
     });
   } catch (error) {
     console.error('Change admin password error:', error);
-    
+
     // If table doesn't exist, create it
     if (error.code === 'ER_NO_SUCH_TABLE') {
       try {
@@ -2002,7 +2002,7 @@ export async function changeAdminPassword(req, res, next) {
         return next(createError);
       }
     }
-    
+
     return next(error);
   }
 }

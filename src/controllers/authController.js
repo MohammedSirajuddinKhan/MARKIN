@@ -95,7 +95,7 @@ export async function login(req, res, next) {
 
 export function logout(req, res) {
   const userId = req.session?.user?.id;
-  
+
   // Disconnect all SSE connections for this user
   if (userId) {
     notificationService.disconnectUser(userId);
